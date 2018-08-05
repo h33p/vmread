@@ -1,12 +1,21 @@
 project('vctk', 'cpp', 'c', default_options : ['c_std=c99'])
 
-compile_args = ['-pedantic', '-Werror']
+compile_args = ['-pedantic', '-Werror', '-DMVERBOSE=4', '-fsanitize=address', '-lasan']
 
 dl = meson.get_compiler('c').find_library('dl', required : false)
 thread = meson.get_compiler('c').find_library('pthread', required : false)
 
+base_files = ['mem.c', 'wintools.c']
+
 example = executable(
 	'example',
-	files('example.c', 'mem.c', 'vmmem.c', 'wintools.c'),
-  c_args : compile_args
+	files(base_files + ['example.c', 'vmmem.c']),
+  c_args : compile_args,
+  link_args : compile_args
+)
+
+example_lib = shared_library(
+	'example',
+	files(base_files + ['example.c', 'intmem.c']),
+  dependencies: [dl]
 )

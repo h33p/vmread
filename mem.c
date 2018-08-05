@@ -1,7 +1,9 @@
 #include "mem.h"
+#include <string.h>
+#include <stdio.h>
 
 const uint64_t PMASK = (~0xfull << 8) & 0xfffffffffull;
-static void FillRWInfo(ProcessData* data, uint64_t dirBase, RWInfo* info, int count, uint64_t local, uint64_t remote, size_t len);
+static void FillRWInfo(ProcessData* data, uint64_t dirBase, RWInfo* info, int* count, uint64_t local, uint64_t remote, size_t len);
 
 int VMemRead(ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remote, size_t size)
 {
@@ -10,7 +12,7 @@ int VMemRead(ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remot
 
 	int dataCount = ((size - 1) / 0x1000) + 2;
 	RWInfo rdata[dataCount];
-	FillRWInfo(data, dirBase, rdata, dataCount, local, remote, size);
+	FillRWInfo(data, dirBase, rdata, &dataCount, local, remote, size);
 	return MemReadMul(data, rdata, dataCount);
 }
 
@@ -21,7 +23,7 @@ int VMemWrite(ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remo
 
 	int dataCount = ((size - 1) / 0x1000) + 2;
 	RWInfo wdata[dataCount];
-	FillRWInfo(data, dirBase, wdata, dataCount, local, remote, size);
+	FillRWInfo(data, dirBase, wdata, &dataCount, local, remote, size);
 	return MemWriteMul(data, wdata, dataCount);
 }
 
@@ -71,7 +73,7 @@ uint64_t VTranslate(ProcessData* data, uint64_t dirBase, uint64_t address)
 
 	/* Large page */
 	if (pteAddr & 0x80)
-		return (pteAddr & PMASK) + ((pte & 0xfff) << 12) + pageOffset;
+		return (pteAddr & PMASK) + (address & ~(~0ull << 21));
 
 	address = MemReadU64(data, (pteAddr & PMASK) + 8 * pte) & PMASK;
 
@@ -83,8 +85,9 @@ uint64_t VTranslate(ProcessData* data, uint64_t dirBase, uint64_t address)
 
 /* Static functions */
 
-static void FillRWInfo(ProcessData* data, uint64_t dirBase, RWInfo* info, int count, uint64_t local, uint64_t remote, size_t len)
+static void FillRWInfo(ProcessData* data, uint64_t dirBase, RWInfo* info, int* count, uint64_t local, uint64_t remote, size_t len)
 {
+	memset(info, 0, sizeof(RWInfo) * *count);
 	info[0].local = local;
     info[0].remote = VTranslate(data, dirBase, remote);
     info[0].size = 0x1000 - (remote & 0xfff);
@@ -97,6 +100,9 @@ static void FillRWInfo(ProcessData* data, uint64_t dirBase, RWInfo* info, int co
 	    info[i].size = len - curAddress + remote;
 		if (len > 0x1000)
 			len = 0x1000;
-		i++;
+		if (info[i].remote)
+			i++;
 	}
+
+	*count = i;
 }

@@ -9,7 +9,7 @@ extern "C" {
   Provides all utilities and structures for Windows operating systems.
 */
 
-#include "structs.h"
+#include "definitions.h"
 
 typedef struct WinOffsets
 {

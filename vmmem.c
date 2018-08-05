@@ -1,6 +1,7 @@
 #include "mem.h"
 #include <stdlib.h>
 #include <sys/uio.h>
+#include <stdio.h>
 
 /* Memory read implementation using linux process_vm_ functions */
 

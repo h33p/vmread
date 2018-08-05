@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#include "structs.h"
+#include "definitions.h"
 
 #define PAGE_OFFSET_SIZE 12
 
