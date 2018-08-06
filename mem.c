@@ -50,10 +50,10 @@ uint64_t VTranslate(ProcessData* data, uint64_t dirBase, uint64_t address)
 	dirBase &= ~0xf;
 
 	uint64_t pageOffset = address & ~(~0ul << PAGE_OFFSET_SIZE);
-    uint64_t pte = ((address >> 12) & (0x1ffll));
-    uint64_t pt = ((address >> 21) & (0x1ffll));
-    uint64_t pd = ((address >> 30) & (0x1ffll));
-    uint64_t pdp = ((address >> 39) & (0x1ffll));
+	uint64_t pte = ((address >> 12) & (0x1ffll));
+	uint64_t pt = ((address >> 21) & (0x1ffll));
+	uint64_t pd = ((address >> 30) & (0x1ffll));
+	uint64_t pdp = ((address >> 39) & (0x1ffll));
 
 	uint64_t pdpe = MemReadU64(data, dirBase + 8 * pdp);
 	if (~pdpe & 1)
@@ -89,15 +89,15 @@ static void FillRWInfo(ProcessData* data, uint64_t dirBase, RWInfo* info, int* c
 {
 	memset(info, 0, sizeof(RWInfo) * *count);
 	info[0].local = local;
-    info[0].remote = VTranslate(data, dirBase, remote);
-    info[0].size = 0x1000 - (remote & 0xfff);
+	info[0].remote = VTranslate(data, dirBase, remote);
+	info[0].size = 0x1000 - (remote & 0xfff);
 
 	uint64_t curAddress = (remote & ~0xfff) + 0x1000;
 	int i = 1;
 	for (; curAddress < (remote + len); curAddress += 0x1000) {
 		info[i].local = local + 0x1000 * (i-1) + info[0].size;
-	    info[i].remote = VTranslate(data, dirBase, remote + 0x1000 * (i-1) + info[0].size);
-	    info[i].size = len - curAddress + remote;
+		info[i].remote = VTranslate(data, dirBase, remote + 0x1000 * (i-1) + info[0].size);
+		info[i].size = len - curAddress + remote;
 		if (len > 0x1000)
 			len = 0x1000;
 		if (info[i].remote)

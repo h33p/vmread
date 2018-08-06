@@ -4,13 +4,12 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-#define MODE_EXTERNAL 1
-#define MODE_QEMUINJECT 2
-
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 
 FILE* dfile;
+extern uint64_t KFIXC;
+extern uint64_t KFIXO;
 
 __attribute__((constructor))
 void init()
@@ -32,6 +31,14 @@ void init()
 
 	WinCtx ctx;
 	int ret = InitializeContext(&ctx, pid);
+	/* Testing for XP */
+	if (ret) {
+		FreeContext(&ctx);
+		fprintf(out, "ERROR! Status %d, retrying for XP...\n", ret);
+		KFIXC = 0x40000000ll * 4;
+		KFIXO = 0x40000000;
+		ret = InitializeContext(&ctx, pid);
+	}
 	fprintf(out, "Initialization status: %d\n", ret);
 
 	if (0) {
@@ -50,7 +57,7 @@ void init()
 
 	fprintf(out, "\nProcess List:\nPID\tVIRT\t\t\tPHYS\t\tBASE\t\tNAME\n");
 	for (size_t i = 0; i < processList.size; i++)
-	    fprintf(out, "%lu\t%16lx\t%9lx\t%9lx\t%s\n", processList.list[i].pid, processList.list[i].process, processList.list[i].physProcess, processList.list[i].dirBase, processList.list[i].name);
+		fprintf(out, "%lu\t%.16lx\t%.9lx\t%.9lx\t%s\n", processList.list[i].pid, processList.list[i].process, processList.list[i].physProcess, processList.list[i].dirBase, processList.list[i].name);
 
 	free(processList.list);
 	FreeContext(&ctx);

@@ -49,13 +49,13 @@ int InitializeContext(WinCtx* ctx, pid_t pid)
 	if (GenerateExportList(ctx, &ctx->initialProcess, ctx->ntKernel, &ctx->ntExports))
 		return 5;
 
-    uint64_t initialSystemProcess = FindProcAddress(ctx->ntExports, "PsInitialSystemProcess");
+	uint64_t initialSystemProcess = FindProcAddress(ctx->ntExports, "PsInitialSystemProcess");
 
 	if (!initialSystemProcess)
 		return 6;
 
 	MSG(2, "PsInitialSystemProcess:\t%lx (%lx)\n", initialSystemProcess, VTranslate(&ctx->process, ctx->initialProcess.dirBase, initialSystemProcess));
-    VMemRead(&ctx->process, ctx->initialProcess.dirBase, (uint64_t)&ctx->initialProcess.process, initialSystemProcess, sizeof(uint64_t));
+	VMemRead(&ctx->process, ctx->initialProcess.dirBase, (uint64_t)&ctx->initialProcess.process, initialSystemProcess, sizeof(uint64_t));
 
 	if (!ctx->initialProcess.process)
 		return 7;
@@ -63,7 +63,7 @@ int InitializeContext(WinCtx* ctx, pid_t pid)
 	ctx->initialProcess.physProcess = VTranslate(&ctx->process, ctx->initialProcess.dirBase, ctx->initialProcess.process);
 	MSG(2, "System (PID 4):\t%lx (%lx)\n", ctx->initialProcess.process, ctx->initialProcess.physProcess);
 
-    ctx->ntVersion = GetNTVersion(ctx);
+	ctx->ntVersion = GetNTVersion(ctx);
 
 	if (!ctx->ntVersion)
 		return 8;
@@ -96,7 +96,7 @@ IMAGE_NT_HEADERS* GetNTHeader(WinCtx* ctx, WinProcess* process, uint64_t address
 		return NULL;
 
 	if(ntHeader->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC && ntHeader->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC)
-	   return NULL;
+		return NULL;
 
 	*is64Bit = ntHeader->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC;
 
@@ -235,7 +235,16 @@ WinProcessList GenerateProcessList(WinCtx* ctx)
 		}
 
 		virtProcess = MemReadU64(&ctx->process, curProc + ctx->offsets.apl) - ctx->offsets.apl;
+		if (!virtProcess) {
+			list.size--;
+			break;
+		}
+
 		curProc = VTranslate(&ctx->process, dirBase, virtProcess);
+		if (!curProc) {
+			list.size--;
+			break;
+		}
 	}
 
 	return list;
@@ -267,15 +276,21 @@ static int CheckLow(WinCtx* ctx, uint64_t* pml4, uint64_t* kernelEntry)
 	return 0;
 }
 
+int dprint = 0;
+
 static uint64_t FindNTKernel(WinCtx* ctx, uint64_t kernelEntry)
 {
 	uint64_t i, o, p, u;
 	char buf[0x10000];
 
-	for (i = kernelEntry & ~0x1fffff; i > kernelEntry - 0x20000000; i -= 0x200000) {
+	for (i = (kernelEntry & ~0x1fffff) + 0x20000000; i > kernelEntry - 0x20000000; i -= 0x200000) {
 		for (o = 0; o < 0x20; o++) {
 			VMemRead(&ctx->process, ctx->initialProcess.dirBase, (uint64_t)buf, i + 0x10000 * o, 0x10000);
 			for (p = 0; p < 0x10000; p += 0x1000) {
+				if(i + 0x10000 * o + p == 0xfffff80001000000) {
+					dprint = 1;
+					dprint = 0;
+				}
 				if (*(short*)(buf + p) == IMAGE_DOS_SIGNATURE) {
 					int kdbg = 0, poolCode = 0;
 					for (u = 0; u < 0x1000; u++) {
@@ -309,14 +324,16 @@ static uint16_t GetNTVersion(WinCtx* ctx)
 		if (!major && !minor)
 			if (*(uint32_t*)b == 0x441c748)
 				return ((uint16_t)b[4]) * 100 + (b[5] & 0xf);
-		if ((*(uint32_t*)b & 0x441c7) == 0x441c7)
+		if (!major && (*(uint32_t*)b & 0x441c7) == 0x441c7)
 			major = b[3];
-		if ((*(uint32_t*)b & 0x841c7) == 0x841c7)
+		if (!minor && (*(uint32_t*)b & 0x841c7) == 0x841c7)
 			minor = b[3];
 	}
 
 	if (minor >= 100)
 		minor = 0;
+
+	printf("%hx %hx\n", major, minor);
 
 	return ((uint16_t)major) * 100 + minor;
 }
@@ -324,6 +341,19 @@ static uint16_t GetNTVersion(WinCtx* ctx)
 static int SetupOffsets(WinCtx* ctx)
 {
 	switch (ctx->ntVersion) {
+	  case 502: /* XP */
+		  ctx->offsets = (WinOffsets){
+			  .apl = 0xe0,
+			  .session = 0x260,
+			  .imageFileName = 0x268,
+			  .dirBase = 0x28,
+			  .peb = 0x2c0,
+			  .peb32 = 0x30,
+			  .threadListHead = 0x30,
+			  .threadListEntry = 0x2f8,
+			  .teb = 0xf0
+		  };
+		  break;
 	  case 601: /* W7 */
 		  ctx->offsets = (WinOffsets){
 			  .apl = 0x188,

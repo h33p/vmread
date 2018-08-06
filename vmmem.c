@@ -7,9 +7,11 @@
 
 /*
   On windows, first 2^31 physical bytes are really allocated for various PCI device mappings and do not point to actual physical RAM (mmapped region in QEMU case).
+  It also differs on Windows XP. This should be solved by injecting code into the kernel to retrieve the actual physical memory map of the system
 */
-#define KFIX 0x80000000
-#define KFIX2(x) ((x) < KFIX ? (x) : ((x) - KFIX))
+uint64_t KFIXC = 0x80000000;
+uint64_t KFIXO = 0x80000000;
+#define KFIX2(x) ((x) < KFIXC ? (x) : ((x) - KFIXO))
 
 ssize_t process_vm_readv(pid_t pid,
 						 const struct iovec *local_iov,
@@ -47,7 +49,7 @@ int MemReadMul(ProcessData* data, RWInfo* rdata, size_t num)
 		remote[i].iov_base = (void*)(data->mapsStart + KFIX2(rdata[i].remote));
 		remote[i].iov_len = rdata[i].size;
 	}
-    return process_vm_readv(data->pid, local, num, remote, num, 0);
+	return process_vm_readv(data->pid, local, num, remote, num, 0);
 }
 
 int MemWrite(ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t len)
@@ -72,5 +74,5 @@ int MemWriteMul(ProcessData* data, RWInfo* wdata, size_t num)
 		remote[i].iov_base = (void*)(data->mapsStart + KFIX2(wdata[i].remote));
 		remote[i].iov_len = wdata[i].size;
 	}
-    return process_vm_writev(data->pid, local, num, remote, num, 0);
+	return process_vm_writev(data->pid, local, num, remote, num, 0);
 }

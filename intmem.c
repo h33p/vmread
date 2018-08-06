@@ -3,8 +3,9 @@
 
 /* Implementation for direct memory reads, used when injected into the QEMU process */
 
-#define KFIX 0x80000000
-#define KFIX2(x) ((x) < KFIX ? (x) : ((x) - KFIX))
+uint64_t KFIXC = 0x80000000;
+uint64_t KFIXO = 0x80000000;
+#define KFIX2(x) ((x) < KFIXC ? (x) : ((x) - KFIXO))
 
 int MemRead(ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t len)
 {
@@ -20,13 +21,13 @@ int MemReadMul(ProcessData* data, RWInfo* rdata, size_t num)
 		memcpy((void*)rdata[i].local, (void*)(KFIX2(rdata[i].remote) + data->mapsStart), rdata[i].size);
 		flen += rdata[i].size;
 	}
-    return flen;
+	return flen;
 }
 
 int MemWrite(ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t len)
 {
 	memcpy((void*)(KFIX2(remoteAddr) + data->mapsStart), (void*)localAddr, len);
-    return len;
+	return len;
 }
 
 int MemWriteMul(ProcessData* data, RWInfo* wdata, size_t num)
@@ -37,5 +38,5 @@ int MemWriteMul(ProcessData* data, RWInfo* wdata, size_t num)
 		memcpy((void*)(KFIX2(wdata[i].remote) + data->mapsStart), (void*)wdata[i].local, wdata[i].size);
 		flen += wdata[i].size;
 	}
-    return flen;
+	return flen;
 }
