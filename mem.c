@@ -42,7 +42,7 @@ uint64_t MemWriteU64(ProcessData* data, uint64_t remote)
 }
 
 /*
-  Translates a virtual address to a physical one. This (most likely) is windows specific and might need extra work to work on Linux.
+  Translates a virtual address to a physical one. This (most likely) is windows specific and might need extra work to work on Linux target.
 */
 
 uint64_t VTranslate(ProcessData* data, uint64_t dirBase, uint64_t address)
@@ -63,7 +63,7 @@ uint64_t VTranslate(ProcessData* data, uint64_t dirBase, uint64_t address)
 	if (~pde & 1)
 		return 0;
 
-	/* Large page, use pde's 12-34 bits */
+	/* 1GB large page, use pde's 12-34 bits */
 	if (pde & 0x80)
 		return (pde & (~0ull << 42 >> 12)) + (address & ~(~0ull << 30));
 
@@ -71,7 +71,7 @@ uint64_t VTranslate(ProcessData* data, uint64_t dirBase, uint64_t address)
 	if (~pteAddr & 1)
 		return 0;
 
-	/* Large page */
+	/* 2MB large page */
 	if (pteAddr & 0x80)
 		return (pteAddr & PMASK) + (address & ~(~0ull << 21));
 

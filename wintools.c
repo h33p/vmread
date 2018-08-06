@@ -5,8 +5,10 @@
 
 static int CheckLow(WinCtx* ctx, uint64_t* pml4, uint64_t* kernelEntry);
 static uint64_t FindNTKernel(WinCtx* ctx, uint64_t kernelEntry);
+static uint16_t GetNTVersion(WinCtx* ctx);
+static int SetupOffsets(WinCtx* ctx);
 
-int InitializeContext(WinCtx* ctx, pid_t pid, int version)
+int InitializeContext(WinCtx* ctx, pid_t pid)
 {
 	uint64_t pml4, kernelEntry;
 
@@ -36,16 +38,209 @@ int InitializeContext(WinCtx* ctx, pid_t pid, int version)
 
 	MSG(2, "PML4:\t%lx\t| KernelEntry:\t%lx\n", pml4, kernelEntry);
 
-	ctx->dirBase = pml4;
+	ctx->initialProcess.dirBase = pml4;
 	ctx->ntKernel = FindNTKernel(ctx, kernelEntry);
 
 	if (!ctx->ntKernel)
 		return 4;
 
-	MSG(2, "Kernel Base:\t%lx (%lx)\n", ctx->ntKernel, VTranslate(&ctx->process, ctx->dirBase, ctx->ntKernel));
+	MSG(2, "Kernel Base:\t%lx (%lx)\n", ctx->ntKernel, VTranslate(&ctx->process, ctx->initialProcess.dirBase, ctx->ntKernel));
+
+	if (GenerateExportList(ctx, &ctx->initialProcess, ctx->ntKernel, &ctx->ntExports))
+		return 5;
+
+    uint64_t initialSystemProcess = FindProcAddress(ctx->ntExports, "PsInitialSystemProcess");
+
+	if (!initialSystemProcess)
+		return 6;
+
+	MSG(2, "PsInitialSystemProcess:\t%lx (%lx)\n", initialSystemProcess, VTranslate(&ctx->process, ctx->initialProcess.dirBase, initialSystemProcess));
+    VMemRead(&ctx->process, ctx->initialProcess.dirBase, (uint64_t)&ctx->initialProcess.process, initialSystemProcess, sizeof(uint64_t));
+
+	if (!ctx->initialProcess.process)
+		return 7;
+
+	ctx->initialProcess.physProcess = VTranslate(&ctx->process, ctx->initialProcess.dirBase, ctx->initialProcess.process);
+	MSG(2, "System (PID 4):\t%lx (%lx)\n", ctx->initialProcess.process, ctx->initialProcess.physProcess);
+
+    ctx->ntVersion = GetNTVersion(ctx);
+
+	if (!ctx->ntVersion)
+		return 8;
+
+	MSG(2, "NT Version:\t%hu\n", ctx->ntVersion);
+
+	if (SetupOffsets(ctx))
+		return 9;
 
 	return 0;
 }
+
+int FreeContext(WinCtx* ctx)
+{
+	FreeExportList(ctx->ntExports);
+	return 0;
+}
+
+IMAGE_NT_HEADERS* GetNTHeader(WinCtx* ctx, WinProcess* process, uint64_t address, uint8_t* header, uint8_t* is64Bit)
+{
+	if (VMemRead(&ctx->process, process->dirBase, (uint64_t)header, address, 0x1000) == -1)
+		return NULL;
+
+	IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)header;
+	if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE)
+		return NULL;
+
+	IMAGE_NT_HEADERS* ntHeader = (IMAGE_NT_HEADERS*)(header + dosHeader->e_lfanew);
+	if ((uint8_t*)ntHeader - header > 0x800 || ntHeader->Signature != IMAGE_NT_SIGNATURE)
+		return NULL;
+
+	if(ntHeader->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC && ntHeader->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC)
+	   return NULL;
+
+	*is64Bit = ntHeader->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC;
+
+	return ntHeader;
+}
+
+int ParseExportTable(WinCtx* ctx, WinProcess* process, uint64_t moduleBase, IMAGE_DATA_DIRECTORY* exports, WinExportList* outList)
+{
+	if (exports->Size < sizeof(IMAGE_EXPORT_DIRECTORY) || exports->Size > 0x3fffff || exports->VirtualAddress == moduleBase)
+		return 1;
+
+	char buf[exports->Size + 1];
+	IMAGE_EXPORT_DIRECTORY* exportDir = (IMAGE_EXPORT_DIRECTORY*)buf;
+	if (VMemRead(&ctx->process, process->dirBase, (uint64_t)buf, moduleBase + exports->VirtualAddress, exports->Size) == -1)
+		return 2;
+	buf[exports->Size] = 0;
+	if (!exportDir->NumberOfNames || !exportDir->AddressOfNames)
+		return 3;
+
+	uint32_t exportOffset = exports->VirtualAddress;
+
+	uint32_t* names = (uint32_t*)(buf + exportDir->AddressOfNames - exportOffset);
+	if (exportDir->AddressOfNames - exportOffset + exportDir->NumberOfNames * sizeof(uint32_t) > exports->Size)
+		return 4;
+	uint16_t* ordinals = (uint16_t*)(buf + exportDir->AddressOfNameOrdinals - exportOffset);
+	if (exportDir->AddressOfNameOrdinals - exportOffset + exportDir->NumberOfNames * sizeof(uint16_t) > exports->Size)
+		return 5;
+	uint32_t* functions = (uint32_t*)(buf + exportDir->AddressOfFunctions - exportOffset);
+	if (exportDir->AddressOfFunctions - exportOffset + exportDir->NumberOfFunctions * sizeof(uint32_t) > exports->Size)
+		return 6;
+
+	outList->count = exportDir->NumberOfNames;
+	outList->list = (WinExport*)malloc(sizeof(WinExport) * outList->count);
+
+	for (int i = 0; i < exportDir->NumberOfNames; i++) {
+		if (names[i] > exports->Size + exportOffset) {
+			outList->list[i].name = strdup("\0");
+		    outList->list[i].address = 0;
+			continue;
+		}
+		outList->list[i].name = strdup(buf + names[i] - exportOffset);
+	    outList->list[i].address = moduleBase + functions[ordinals[i]];
+	}
+
+	return 0;
+}
+
+int GenerateExportList(WinCtx* ctx, WinProcess* process, uint64_t moduleBase, WinExportList* outList)
+{
+	uint8_t is64 = 0;
+	uint8_t headerBuf[0x1000];
+
+	IMAGE_NT_HEADERS64* ntHeader64 = GetNTHeader(ctx, process, moduleBase, headerBuf, &is64);
+	if (!ntHeader64)
+		return 1;
+
+	IMAGE_NT_HEADERS32* ntHeader32 = (IMAGE_NT_HEADERS32*)ntHeader64;
+
+	IMAGE_DATA_DIRECTORY* exportTable = NULL;
+	if (is64)
+		exportTable = ntHeader64->OptionalHeader.DataDirectory + IMAGE_DIRECTORY_ENTRY_EXPORT;
+	else
+		exportTable = ntHeader32->OptionalHeader.DataDirectory + IMAGE_DIRECTORY_ENTRY_EXPORT;
+
+	return ParseExportTable(ctx, process, moduleBase, exportTable, outList) != 0;
+}
+
+void FreeExportList(WinExportList list)
+{
+	if (!list.list)
+		return;
+
+	for (int i = 0; i < list.count; i++)
+		free((char*)list.list[i].name);
+
+	free(list.list);
+	list.list = NULL;
+}
+
+/* TODO: do without the table parsing, we are just wasting a lot of string duplication etc. */
+uint64_t GetProcAddress(WinCtx* ctx, WinProcess* process, uint64_t module, const char* procName)
+{
+	WinExportList exports;
+
+	if (GenerateExportList(ctx, process, module, &exports))
+		return 1;
+
+	uint64_t ret = FindProcAddress(exports, procName);
+	FreeExportList(exports);
+	return ret;
+}
+
+uint64_t FindProcAddress(WinExportList exports, const char* procName)
+{
+	for (int i = 0; i < exports.count; i++)
+		if (!strcmp(procName, exports.list[i].name))
+			return exports.list[i].address;
+	return 0;
+}
+
+WinProcessList GenerateProcessList(WinCtx* ctx)
+{
+	WinProcessList list;
+
+	uint64_t curProc = ctx->initialProcess.physProcess;
+	uint64_t virtProcess = ctx->initialProcess.process;
+
+	list.list = (WinProcess*)malloc(sizeof(WinProcess) * 25);
+	list.size = 0;
+	size_t maxSize = 25;
+
+	while (!list.size || curProc != ctx->initialProcess.physProcess) {
+		uint64_t pid = MemReadU64(&ctx->process, curProc + ctx->offsets.apl - 8);
+		uint64_t dirBase = MemReadU64(&ctx->process, curProc + ctx->offsets.dirBase);
+
+		list.list[list.size] = (WinProcess){
+			.process = virtProcess,
+			.physProcess = curProc,
+			.dirBase = dirBase,
+			.pid = pid,
+		};
+
+		MemRead(&ctx->process, (uint64_t)list.list[list.size].name, curProc + ctx->offsets.imageFileName, 15);
+		list.list[list.size].name[15] = '\0';
+
+		list.size++;
+		if (list.size > 1000 || pid == 0)
+			break;
+
+		if (list.size >= maxSize) {
+			maxSize = list.size * 2;
+			WinProcess* newProc = (WinProcess*)realloc(list.list, sizeof(WinProcess) * maxSize);
+			if (!newProc)
+				break;
+			list.list = newProc;
+		}
+
+		virtProcess = MemReadU64(&ctx->process, curProc + ctx->offsets.apl) - ctx->offsets.apl;
+		curProc = VTranslate(&ctx->process, dirBase, virtProcess);
+	}
+
+	return list;
+}
+
 
 /*
   The low stub (if exists), contains PML4 (kernel DirBase) and KernelEntry point.
@@ -79,9 +274,9 @@ static uint64_t FindNTKernel(WinCtx* ctx, uint64_t kernelEntry)
 
 	for (i = kernelEntry & ~0x1fffff; i > kernelEntry - 0x20000000; i -= 0x200000) {
 		for (o = 0; o < 0x20; o++) {
-			VMemRead(&ctx->process, ctx->dirBase, (uint64_t)buf, i + 0x10000 * o, 0x10000);
+			VMemRead(&ctx->process, ctx->initialProcess.dirBase, (uint64_t)buf, i + 0x10000 * o, 0x10000);
 			for (p = 0; p < 0x10000; p += 0x1000) {
-				if (*(short*)(buf + p) == 0x5a4d) { /* MZ magic */
+				if (*(short*)(buf + p) == IMAGE_DOS_SIGNATURE) {
 					int kdbg = 0, poolCode = 0;
 					for (u = 0; u < 0x1000; u++) {
 						kdbg = kdbg || *(uint64_t*)(buf + p + u) == 0x4742444b54494e49;
@@ -94,5 +289,98 @@ static uint64_t FindNTKernel(WinCtx* ctx, uint64_t kernelEntry)
 		}
 	}
 
+	return 0;
+}
+
+static uint16_t GetNTVersion(WinCtx* ctx)
+{
+	uint64_t getVersion = FindProcAddress(ctx->ntExports, "RtlGetVersion");
+
+	if (!getVersion)
+		return 0;
+
+	char buf[0x100];
+	VMemRead(&ctx->process, ctx->initialProcess.dirBase, (uint64_t)buf, getVersion, 0x100);
+
+	char major = 0, minor = 0;
+
+	/* Find writes to rcx +4 and +8 -- those are our major and minor versions */
+	for (char* b = buf; b - buf < 0xf0; b++) {
+		if (!major && !minor)
+			if (*(uint32_t*)b == 0x441c748)
+				return ((uint16_t)b[4]) * 100 + (b[5] & 0xf);
+		if ((*(uint32_t*)b & 0x441c7) == 0x441c7)
+			major = b[3];
+		if ((*(uint32_t*)b & 0x841c7) == 0x841c7)
+			minor = b[3];
+	}
+
+	if (minor >= 100)
+		minor = 0;
+
+	return ((uint16_t)major) * 100 + minor;
+}
+
+static int SetupOffsets(WinCtx* ctx)
+{
+	switch (ctx->ntVersion) {
+	  case 601: /* W7 */
+		  ctx->offsets = (WinOffsets){
+			  .apl = 0x188,
+			  .session = 0x2d8,
+			  .imageFileName = 0x2e0,
+			  .dirBase = 0x28,
+			  .peb = 0x338,
+			  .peb32 = 0x30,
+			  .threadListHead = 0x30,
+			  .threadListEntry = 0x2f8,
+			  .teb = 0xf0
+		  };
+		  /* SP1 */
+		  if (ctx->ntBuild == 7601)
+			  ctx->offsets.imageFileName = 0x2d8;
+		  break;
+	  case 602: /* W8 */
+		  ctx->offsets = (WinOffsets){
+			  .apl = 0x2e8,
+			  .session = 0x430,
+			  .imageFileName = 0x438,
+			  .dirBase = 0x28,
+			  .peb = 0x338, /*peb will be wrong on Windows 8 and 8.1*/
+			  .peb32 = 0x30,
+			  .threadListHead = 0x30,
+			  .threadListEntry = 0x2f8,
+			  .teb = 0xf0
+		  };
+		  break;
+	  case 603: /* W8.1 */
+		  ctx->offsets = (WinOffsets){
+			  .apl = 0x2e8,
+			  .session = 0x430,
+			  .imageFileName = 0x438,
+			  .dirBase = 0x28,
+			  .peb = 0x338,
+			  .peb32 = 0x30,
+			  .threadListHead = 0x30,
+			  .threadListEntry = 0x2f8,
+			  .teb = 0xf0
+		  };
+		  break;
+	  case 1000: /* W10 */
+		  ctx->offsets = (WinOffsets){
+			  .apl = 0x2e8,
+			  .session = 0x448,
+			  .imageFileName = 0x450,
+			  .dirBase = 0x28,
+			  .peb = 0x3f8,
+			  .peb32 = 0x30,
+			  .threadListHead = 0x30,
+			  .threadListEntry = 0x2f8,
+			  .teb = 0xf0
+		  };
+		  break;
+	  default:
+		  return 1;
+	}
 	return 0;
 }

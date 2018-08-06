@@ -1,0 +1,11 @@
+#!/bin/sh
+
+sudo gdb -n -q -batch \
+    -ex "attach $(pidof qemu-system-x86_64)" \
+    -ex "set \$dlopen = (void*(*)(char*, int)) dlopen" \
+    -ex "set \$dlclose = (int(*)(void*)) dlclose" \
+    -ex "set \$library = \$dlopen(\"$(pwd)/build/libexample.so\", 1)" \
+    -ex "call \$dlclose(\$library)" \
+    -ex "detach" \
+    -ex "quit"
+

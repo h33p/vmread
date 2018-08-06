@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>
+#include <stdio.h>
 
 typedef struct ProcessData
 {
@@ -12,7 +13,9 @@ typedef struct ProcessData
 	uint64_t mapsSize;
 } ProcessData;
 
-#define DMSG(...) printf(__VA_ARGS__)
+extern FILE* dfile;
+
+#define DMSG(...) fprintf(dfile, __VA_ARGS__)
 #define NMSG(...)
 #define PASTE(A, B) A##B
 
