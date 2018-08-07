@@ -34,7 +34,7 @@ void init()
 	if (!ret) {
 		if (0) {
 			fprintf(out, "Kernel Export Table:\n");
-			for (size_t i = 0; i < ctx.ntExports.count; i++) {
+			for (size_t i = 0; i < ctx.ntExports.size; i++) {
 				char* c = (char*)ctx.ntExports.list[i].name;
 				while (*c != '\0')
 					putc(*c++, out);
@@ -44,7 +44,7 @@ void init()
 			}
 		}
 
-		WinProcessList processList = GenerateProcessList(&ctx);
+		WinProcList processList = GenerateProcessList(&ctx);
 
 		fprintf(out, "\nProcess List:\nPID\tVIRT\t\t\tPHYS\t\tBASE\t\tNAME\n");
 		for (size_t i = 0; i < processList.size; i++)
@@ -54,7 +54,7 @@ void init()
 			if (!strcmp(processList.list[i].name, "csgo.exe")) {
 				WinModuleList list = GenerateModuleList(&ctx, processList.list + i);
 				fprintf(out, "Module List for %s:\nBASEADDR\tENTRY_POINT\tMOD_SIZE\tLOAD\tNAME\n", processList.list[i].name);
-				for (int o = 0; o < list.count; o++)
+				for (int o = 0; o < list.size; o++)
 					fprintf(out, "%.8lx\t%.8lx\t%.8lx\t%hx\t%s\n", list.list[o].baseAddress, list.list[o].entryPoint, list.list[o].sizeOfModule, list.list[o].loadCount, list.list[o].name);
 
 				FreeModuleList(list);

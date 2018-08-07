@@ -2,13 +2,16 @@
 #include "mem.h"
 #include "pmparser.h"
 #include <errno.h>
+#include <string.h>
+
+char* strdup(char*);
 
 static int CheckLow(WinCtx* ctx, uint64_t* pml4, uint64_t* kernelEntry);
 static uint64_t FindNTKernel(WinCtx* ctx, uint64_t kernelEntry);
 static uint16_t GetNTVersion(WinCtx* ctx);
 static int SetupOffsets(WinCtx* ctx);
-static void FillModuleList64(WinCtx* ctx, WinProcess* process, WinModuleList* list, size_t* maxSize, char* x86);
-static void FillModuleList32(WinCtx* ctx, WinProcess* process, WinModuleList* list, size_t* maxSize);
+static void FillModuleList64(WinCtx* ctx, WinProc* process, WinModuleList* list, size_t* maxSize, char* x86);
+static void FillModuleList32(WinCtx* ctx, WinProc* process, WinModuleList* list, size_t* maxSize);
 
 extern uint64_t KFIXC;
 extern uint64_t KFIXO;
@@ -98,7 +101,7 @@ int FreeContext(WinCtx* ctx)
 	return 0;
 }
 
-IMAGE_NT_HEADERS* GetNTHeader(WinCtx* ctx, WinProcess* process, uint64_t address, uint8_t* header, uint8_t* is64Bit)
+IMAGE_NT_HEADERS* GetNTHeader(WinCtx* ctx, WinProc* process, uint64_t address, uint8_t* header, uint8_t* is64Bit)
 {
 	if (VMemRead(&ctx->process, process->dirBase, (uint64_t)header, address, 0x1000) == -1)
 		return NULL;
@@ -119,9 +122,9 @@ IMAGE_NT_HEADERS* GetNTHeader(WinCtx* ctx, WinProcess* process, uint64_t address
 	return ntHeader;
 }
 
-int ParseExportTable(WinCtx* ctx, WinProcess* process, uint64_t moduleBase, IMAGE_DATA_DIRECTORY* exports, WinExportList* outList)
+int ParseExportTable(WinCtx* ctx, WinProc* process, uint64_t moduleBase, IMAGE_DATA_DIRECTORY* exports, WinExportList* outList)
 {
-	if (exports->Size < sizeof(IMAGE_EXPORT_DIRECTORY) || exports->Size > 0x3fffff || exports->VirtualAddress == moduleBase)
+	if (exports->Size < sizeof(IMAGE_EXPORT_DIRECTORY) || exports->Size > 0x7fffff || exports->VirtualAddress == moduleBase)
 		return 1;
 
 	char buf[exports->Size + 1];
@@ -144,23 +147,25 @@ int ParseExportTable(WinCtx* ctx, WinProcess* process, uint64_t moduleBase, IMAG
 	if (exportDir->AddressOfFunctions - exportOffset + exportDir->NumberOfFunctions * sizeof(uint32_t) > exports->Size)
 		return 6;
 
-	outList->count = exportDir->NumberOfNames;
-	outList->list = (WinExport*)malloc(sizeof(WinExport) * outList->count);
+	outList->size = exportDir->NumberOfNames;
+	outList->list = (WinExport*)malloc(sizeof(WinExport) * outList->size);
+
+	size_t sz = 0;
 
 	for (int i = 0; i < exportDir->NumberOfNames; i++) {
-		if (names[i] > exports->Size + exportOffset) {
-			outList->list[i].name = strdup("\0");
-		    outList->list[i].address = 0;
+		if (names[i] > exports->Size + exportOffset || names[i] < exportOffset || ordinals[i] > exportDir->NumberOfNames)
 			continue;
-		}
-		outList->list[i].name = strdup(buf + names[i] - exportOffset);
-	    outList->list[i].address = moduleBase + functions[ordinals[i]];
+		outList->list[sz].name = strdup(buf + names[i] - exportOffset);
+		outList->list[sz].address = moduleBase + functions[ordinals[i]];
+		sz++;
 	}
+
+	outList->size = sz;
 
 	return 0;
 }
 
-int GenerateExportList(WinCtx* ctx, WinProcess* process, uint64_t moduleBase, WinExportList* outList)
+int GenerateExportList(WinCtx* ctx, WinProc* process, uint64_t moduleBase, WinExportList* outList)
 {
 	uint8_t is64 = 0;
 	uint8_t headerBuf[0x1000];
@@ -185,7 +190,7 @@ void FreeExportList(WinExportList list)
 	if (!list.list)
 		return;
 
-	for (int i = 0; i < list.count; i++)
+	for (int i = 0; i < list.size; i++)
 		free((char*)list.list[i].name);
 
 	free(list.list);
@@ -193,7 +198,7 @@ void FreeExportList(WinExportList list)
 }
 
 /* TODO: do without the table parsing, we are just wasting a lot of string duplication etc. */
-uint64_t GetProcAddress(WinCtx* ctx, WinProcess* process, uint64_t module, const char* procName)
+uint64_t GetProcAddress(WinCtx* ctx, WinProc* process, uint64_t module, const char* procName)
 {
 	WinExportList exports;
 
@@ -207,20 +212,20 @@ uint64_t GetProcAddress(WinCtx* ctx, WinProcess* process, uint64_t module, const
 
 uint64_t FindProcAddress(WinExportList exports, const char* procName)
 {
-	for (int i = 0; i < exports.count; i++)
+	for (int i = 0; i < exports.size; i++)
 		if (!strcmp(procName, exports.list[i].name))
 			return exports.list[i].address;
 	return 0;
 }
 
-WinProcessList GenerateProcessList(WinCtx* ctx)
+WinProcList GenerateProcessList(WinCtx* ctx)
 {
-	WinProcessList list;
+	WinProcList list;
 
 	uint64_t curProc = ctx->initialProcess.physProcess;
 	uint64_t virtProcess = ctx->initialProcess.process;
 
-	list.list = (WinProcess*)malloc(sizeof(WinProcess) * 25);
+	list.list = (WinProc*)malloc(sizeof(WinProc) * 25);
 	list.size = 0;
 	size_t maxSize = 25;
 
@@ -228,7 +233,7 @@ WinProcessList GenerateProcessList(WinCtx* ctx)
 		uint64_t pid = MemReadU64(&ctx->process, curProc + ctx->offsets.apl - 8);
 		uint64_t dirBase = MemReadU64(&ctx->process, curProc + ctx->offsets.dirBase);
 
-		list.list[list.size] = (WinProcess){
+		list.list[list.size] = (WinProc){
 			.process = virtProcess,
 			.physProcess = curProc,
 			.dirBase = dirBase,
@@ -244,7 +249,7 @@ WinProcessList GenerateProcessList(WinCtx* ctx)
 
 		if (list.size >= maxSize) {
 			maxSize = list.size * 2;
-			WinProcess* newProc = (WinProcess*)realloc(list.list, sizeof(WinProcess) * maxSize);
+			WinProc* newProc = (WinProc*)realloc(list.list, sizeof(WinProc) * maxSize);
 			if (!newProc)
 				break;
 			list.list = newProc;
@@ -264,10 +269,10 @@ WinProcessList GenerateProcessList(WinCtx* ctx)
 	return list;
 }
 
-WinModuleList GenerateModuleList(WinCtx* ctx, WinProcess* process)
+WinModuleList GenerateModuleList(WinCtx* ctx, WinProc* process)
 {
 	WinModuleList list;
-	list.count = 0;
+	list.size = 0;
 	list.list = (WinModule*)malloc(sizeof(WinModule) * 25);
 
 	size_t maxSize = 25;
@@ -285,7 +290,7 @@ void FreeModuleList(WinModuleList list)
 {
 	if (!list.list)
 		return;
-	for (size_t i = 0; i < list.count; i++)
+	for (size_t i = 0; i < list.size; i++)
 		free(list.list[i].name);
 	free(list.list);
 	list.list = NULL;
@@ -293,13 +298,13 @@ void FreeModuleList(WinModuleList list)
 
 WinModule* GetModuleInfo(WinModuleList list, const char* moduleName)
 {
-	for (size_t i = 0; i < list.count; i++)
+	for (size_t i = 0; i < list.size; i++)
 		if (!strcmp(list.list[i].name, moduleName))
 			return list.list + i;
 	return NULL;
 }
 
-PEB GetPeb(WinCtx* ctx, WinProcess* process)
+PEB GetPeb(WinCtx* ctx, WinProc* process)
 {
 	PEB peb;
 	uint64_t ppeb = MemReadU64(&ctx->process, process->physProcess + ctx->offsets.peb);
@@ -307,7 +312,7 @@ PEB GetPeb(WinCtx* ctx, WinProcess* process)
 	return peb;
 }
 
-PEB32 GetPeb32(WinCtx* ctx, WinProcess* process)
+PEB32 GetPeb32(WinCtx* ctx, WinProc* process)
 {
 	PEB32 peb;
 	uint64_t ethread = MemReadU64(&ctx->process, process->physProcess + ctx->offsets.threadListHead) - ctx->offsets.threadListEntry;
@@ -401,8 +406,6 @@ static uint16_t GetNTVersion(WinCtx* ctx)
 	if (minor >= 100)
 		minor = 0;
 
-	printf("%hx %hx\n", major, minor);
-
 	return ((uint16_t)major) * 100 + minor;
 }
 
@@ -483,7 +486,7 @@ static int SetupOffsets(WinCtx* ctx)
 	return 0;
 }
 
-static void FillModuleList64(WinCtx* ctx, WinProcess* process, WinModuleList* list, size_t* maxSize, char* x86)
+static void FillModuleList64(WinCtx* ctx, WinProc* process, WinModuleList* list, size_t* maxSize, char* x86)
 {
 	PEB peb = GetPeb(ctx, process);
 	PEB_LDR_DATA ldr;
@@ -494,7 +497,7 @@ static void FillModuleList64(WinCtx* ctx, WinProcess* process, WinModuleList* li
 	uint64_t prev = head+1;
 
 	do {
-		if (list->count >= *maxSize) {
+		if (list->size >= *maxSize) {
 			*maxSize *= 2;
 			WinModule* newList = (WinModule*)realloc(list->list, sizeof(WinModule) * *maxSize);
 			if (!newList)
@@ -516,19 +519,19 @@ static void FillModuleList64(WinCtx* ctx, WinProcess* process, WinModuleList* li
 		for (int i = 0; i < mod.BaseDllName.length; i++)
 			buf2[i] = ((char*)buf)[i*2];
 		buf2[mod.BaseDllName.length-1] = '\0';
-		list->list[list->count].name = buf2;
-		list->list[list->count].baseAddress = mod.BaseAddress;
-		list->list[list->count].entryPoint = mod.EntryPoint;
-		list->list[list->count].sizeOfModule = mod.SizeOfImage;
-		list->list[list->count].loadCount = mod.LoadCount;
-		list->count++;
+		list->list[list->size].name = buf2;
+		list->list[list->size].baseAddress = mod.BaseAddress;
+		list->list[list->size].entryPoint = mod.EntryPoint;
+		list->list[list->size].sizeOfModule = mod.SizeOfImage;
+		list->list[list->size].loadCount = mod.LoadCount;
+		list->size++;
 
 		if (!strcmp(buf2, "wow64.dll"))
 			*x86 = 1;
 	} while (head != end && head != prev);
 }
 
-static void FillModuleList32(WinCtx* ctx, WinProcess* process, WinModuleList* list, size_t* maxSize)
+static void FillModuleList32(WinCtx* ctx, WinProc* process, WinModuleList* list, size_t* maxSize)
 {
 	PEB32 peb = GetPeb32(ctx, process);
 	PEB_LDR_DATA32 ldr;
@@ -539,7 +542,7 @@ static void FillModuleList32(WinCtx* ctx, WinProcess* process, WinModuleList* li
 	uint32_t prev = head+1;
 
 	do {
-		if (list->count >= *maxSize) {
+		if (list->size >= *maxSize) {
 			*maxSize *= 2;
 			WinModule* newList = (WinModule*)realloc(list->list, sizeof(WinModule) * *maxSize);
 			if (!newList)
@@ -561,11 +564,11 @@ static void FillModuleList32(WinCtx* ctx, WinProcess* process, WinModuleList* li
 		for (int i = 0; i < mod.BaseDllName.length; i++)
 			buf2[i] = ((char*)buf)[i*2];
 		buf2[mod.BaseDllName.length-1] = '\0';
-		list->list[list->count].name = buf2;
-		list->list[list->count].baseAddress = mod.BaseAddress;
-		list->list[list->count].entryPoint = mod.EntryPoint;
-		list->list[list->count].sizeOfModule = mod.SizeOfImage;
-		list->list[list->count].loadCount = mod.LoadCount;
-		list->count++;
+		list->list[list->size].name = buf2;
+		list->list[list->size].baseAddress = mod.BaseAddress;
+		list->list[list->size].entryPoint = mod.EntryPoint;
+		list->list[list->size].sizeOfModule = mod.SizeOfImage;
+		list->list[list->size].loadCount = mod.LoadCount;
+		list->size++;
 	} while (head != end && head != prev);
 }

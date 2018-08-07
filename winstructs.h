@@ -112,6 +112,7 @@ typedef struct _IMAGE_OPTIONAL_HEADER32 {
 	uint32_t SizeOfUninitializedData;
 	uint32_t AddressOfEntryPoint;
 	uint32_t BaseOfCode;
+	uint32_t BaseOfData;
 	uint32_t ImageBase;
 	uint32_t SectionAlignment;
 	uint32_t FileAlignment;

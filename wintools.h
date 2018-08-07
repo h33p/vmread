@@ -25,20 +25,20 @@ typedef struct WinOffsets
 	int64_t teb;
 } WinOffsets;
 
-typedef struct WinProcess
+typedef struct WinProc
 {
 	uint64_t process;
 	uint64_t physProcess;
 	uint64_t dirBase;
 	uint64_t pid;
 	char name[16];
-} WinProcess;
+} WinProc;
 
-typedef struct WinProcessList
+typedef struct WinProcList
 {
-	WinProcess* list;
+	WinProc* list;
 	size_t size;
-} WinProcessList;
+} WinProcList;
 
 typedef struct WinExport
 {
@@ -49,7 +49,7 @@ typedef struct WinExport
 typedef struct WinExportList
 {
 	WinExport* list;
-	size_t count;
+	size_t size;
 } WinExportList;
 
 typedef struct WinModule
@@ -57,14 +57,14 @@ typedef struct WinModule
 	uint64_t baseAddress;
 	uint64_t entryPoint;
 	uint64_t sizeOfModule;
-    char* name;
+	char* name;
 	short loadCount;
 } WinModule;
 
 typedef struct WinModuleList
 {
 	WinModule* list;
-	size_t count;
+	size_t size;
 } WinModuleList;
 
 typedef struct WinCtx
@@ -75,24 +75,23 @@ typedef struct WinCtx
 	uint16_t ntVersion;
 	uint16_t ntBuild;
 	WinExportList ntExports;
-	WinProcess initialProcess;
+	WinProc initialProcess;
 } WinCtx;
 
 int InitializeContext(WinCtx* ctx, pid_t pid);
 int FreeContext(WinCtx* ctx);
-IMAGE_NT_HEADERS* GetNTHeader(WinCtx* ctx, WinProcess* process, uint64_t address, uint8_t* header, uint8_t* is64Bit);
-int ParseExportTable(WinCtx* ctx, WinProcess* process, uint64_t moduleBase, IMAGE_DATA_DIRECTORY* exports, WinExportList* outList);
-int GenerateExportList(WinCtx* ctx, WinProcess* process, uint64_t moduleBase, WinExportList* outList);
+IMAGE_NT_HEADERS* GetNTHeader(WinCtx* ctx, WinProc* process, uint64_t address, uint8_t* header, uint8_t* is64Bit);
+int ParseExportTable(WinCtx* ctx, WinProc* process, uint64_t moduleBase, IMAGE_DATA_DIRECTORY* exports, WinExportList* outList);
+int GenerateExportList(WinCtx* ctx, WinProc* process, uint64_t moduleBase, WinExportList* outList);
 void FreeExportList(WinExportList list);
-uint64_t GetProcAddress(WinCtx* ctx, WinProcess* process, uint64_t module, const char* procName);
+uint64_t GetProcAddress(WinCtx* ctx, WinProc* process, uint64_t module, const char* procName);
 uint64_t FindProcAddress(WinExportList exports, const char* procName);
-WinProcessList GenerateProcessList(WinCtx* ctx);
-WinModuleList GenerateModuleList(WinCtx* ctx, WinProcess* process);
-void FreeModuleList(WinModuleList list);
+WinProcList GenerateProcessList(WinCtx* ctx);
+WinModuleList GenerateModuleList(WinCtx* ctx, WinProc* process);
 void FreeModuleList(WinModuleList list);
 WinModule* GetModuleInfo(WinModuleList list, const char* moduleName);
-PEB GetPeb(WinCtx* ctx, WinProcess* process);
-PEB32 GetPeb32(WinCtx* ctx, WinProcess* process);
+PEB GetPeb(WinCtx* ctx, WinProc* process);
+PEB32 GetPeb32(WinCtx* ctx, WinProc* process);
 
 #ifdef __cplusplus
 }
