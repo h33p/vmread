@@ -20,6 +20,8 @@ int MemRead(ProcessData* data, uint64_t local, uint64_t remote, size_t size);
 int MemWrite(ProcessData* data, uint64_t local, uint64_t remote, size_t size);
 int MemReadMul(ProcessData* data, RWInfo* info, size_t num);
 int MemWriteMul(ProcessData* data, RWInfo* info, size_t num);
+uint64_t VMemReadU64(ProcessData* data, uint64_t dirBase, uint64_t remote);
+uint64_t VMemWriteU64(ProcessData* data, uint64_t dirBase, uint64_t remote);
 uint64_t MemReadU64(ProcessData* data, uint64_t remote);
 uint64_t MemWriteU64(ProcessData* data, uint64_t remote);
 int VMemRead(ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remote, size_t size);

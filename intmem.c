@@ -9,7 +9,10 @@ uint64_t KFIXO = 0x80000000;
 
 int MemRead(ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t len)
 {
-	memcpy((void*)localAddr, (void*)(KFIX2(remoteAddr) + data->mapsStart), len);
+	uint64_t remote = KFIX2(remoteAddr);
+	if (remote >= data->mapsSize - len)
+		return -1;
+	memcpy((void*)localAddr, (void*)(remote + data->mapsStart), len);
 	return len;
 }
 
@@ -18,7 +21,10 @@ int MemReadMul(ProcessData* data, RWInfo* rdata, size_t num)
 	int flen = 0;
 	size_t i;
 	for (i = 0; i < num; i++) {
-		memcpy((void*)rdata[i].local, (void*)(KFIX2(rdata[i].remote) + data->mapsStart), rdata[i].size);
+		uint64_t remote = KFIX2(rdata[i].remote);
+		if (remote >= data->mapsSize - rdata[i].size)
+			return -1;
+		memcpy((void*)rdata[i].local, (void*)(remote + data->mapsStart), rdata[i].size);
 		flen += rdata[i].size;
 	}
 	return flen;
@@ -26,7 +32,10 @@ int MemReadMul(ProcessData* data, RWInfo* rdata, size_t num)
 
 int MemWrite(ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t len)
 {
-	memcpy((void*)(KFIX2(remoteAddr) + data->mapsStart), (void*)localAddr, len);
+	uint64_t remote = KFIX2(remoteAddr);
+	if (remote >= data->mapsSize - len)
+		return -1;
+	memcpy((void*)(remote + data->mapsStart), (void*)localAddr, len);
 	return len;
 }
 
@@ -35,7 +44,10 @@ int MemWriteMul(ProcessData* data, RWInfo* wdata, size_t num)
 	int flen = 0;
 	size_t i;
 	for (i = 0; i < num; i++) {
-		memcpy((void*)(KFIX2(wdata[i].remote) + data->mapsStart), (void*)wdata[i].local, wdata[i].size);
+		uint64_t remote = KFIX2(wdata[i].remote);
+		if (remote >= data->mapsSize - wdata[i].size)
+			return -1;
+		memcpy((void*)(remote + data->mapsStart), (void*)wdata[i].local, wdata[i].size);
 		flen += wdata[i].size;
 	}
 	return flen;

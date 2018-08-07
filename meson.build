@@ -1,6 +1,6 @@
 project('vctk', 'cpp', 'c', default_options : ['c_std=c99'])
 
-compile_args = ['-pedantic', '-Werror', '-DMVERBOSE=4', '-fsanitize=address', '-lasan', '-fmax-errors=10']
+compile_args = ['-pedantic', '-Werror', '-DMVERBOSE=4', '-fsanitize=address', '-lasan', '-fmax-errors=10', '-DREAD_CHECK']
 
 dl = meson.get_compiler('c').find_library('dl', required : false)
 thread = meson.get_compiler('c').find_library('pthread', required : false)

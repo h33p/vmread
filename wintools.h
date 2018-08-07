@@ -42,7 +42,7 @@ typedef struct WinProcessList
 
 typedef struct WinExport
 {
-	const char* name;
+	char* name;
 	uint64_t address;
 } WinExport;
 
@@ -51,6 +51,21 @@ typedef struct WinExportList
 	WinExport* list;
 	size_t count;
 } WinExportList;
+
+typedef struct WinModule
+{
+	uint64_t baseAddress;
+	uint64_t entryPoint;
+	uint64_t sizeOfModule;
+    char* name;
+	short loadCount;
+} WinModule;
+
+typedef struct WinModuleList
+{
+	WinModule* list;
+	size_t count;
+} WinModuleList;
 
 typedef struct WinCtx
 {
@@ -72,6 +87,12 @@ void FreeExportList(WinExportList list);
 uint64_t GetProcAddress(WinCtx* ctx, WinProcess* process, uint64_t module, const char* procName);
 uint64_t FindProcAddress(WinExportList exports, const char* procName);
 WinProcessList GenerateProcessList(WinCtx* ctx);
+WinModuleList GenerateModuleList(WinCtx* ctx, WinProcess* process);
+void FreeModuleList(WinModuleList list);
+void FreeModuleList(WinModuleList list);
+WinModule* GetModuleInfo(WinModuleList list, const char* moduleName);
+PEB GetPeb(WinCtx* ctx, WinProcess* process);
+PEB32 GetPeb32(WinCtx* ctx, WinProcess* process);
 
 #ifdef __cplusplus
 }

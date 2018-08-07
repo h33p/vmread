@@ -15,6 +15,10 @@ typedef struct ProcessData
 
 extern FILE* dfile;
 
+#define MODE_EXTERNAL() 1
+#define MODE_QEMU_INJECT() 2
+#define MODE_DMA() 3
+
 #define DMSG(...) fprintf(dfile, __VA_ARGS__)
 #define NMSG(...)
 #define PASTE(A, B) A##B

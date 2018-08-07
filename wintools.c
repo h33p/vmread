@@ -7,9 +7,16 @@ static int CheckLow(WinCtx* ctx, uint64_t* pml4, uint64_t* kernelEntry);
 static uint64_t FindNTKernel(WinCtx* ctx, uint64_t kernelEntry);
 static uint16_t GetNTVersion(WinCtx* ctx);
 static int SetupOffsets(WinCtx* ctx);
+static void FillModuleList64(WinCtx* ctx, WinProcess* process, WinModuleList* list, size_t* maxSize, char* x86);
+static void FillModuleList32(WinCtx* ctx, WinProcess* process, WinModuleList* list, size_t* maxSize);
+
+extern uint64_t KFIXC;
+extern uint64_t KFIXO;
 
 int InitializeContext(WinCtx* ctx, pid_t pid)
 {
+	memset(ctx, 0, sizeof(WinCtx));
+
 	uint64_t pml4, kernelEntry;
 
 	procmaps_struct* maps = pmparser_parse(pid);
@@ -41,8 +48,17 @@ int InitializeContext(WinCtx* ctx, pid_t pid)
 	ctx->initialProcess.dirBase = pml4;
 	ctx->ntKernel = FindNTKernel(ctx, kernelEntry);
 
-	if (!ctx->ntKernel)
-		return 4;
+	if (!ctx->ntKernel) {
+		/* Test in case we are running XP (QEMU offsets are different) */
+#if (LMODE() != MODE_DMA())
+		KFIXC = 0x40000000ll * 4;
+		KFIXO = 0x40000000;
+		ctx->ntKernel = FindNTKernel(ctx, kernelEntry);
+#endif
+
+		if (!ctx->ntKernel)
+			return 4;
+	}
 
 	MSG(2, "Kernel Base:\t%lx (%lx)\n", ctx->ntKernel, VTranslate(&ctx->process, ctx->initialProcess.dirBase, ctx->ntKernel));
 
@@ -235,19 +251,71 @@ WinProcessList GenerateProcessList(WinCtx* ctx)
 		}
 
 		virtProcess = MemReadU64(&ctx->process, curProc + ctx->offsets.apl) - ctx->offsets.apl;
-		if (!virtProcess) {
-			list.size--;
+		if (!virtProcess)
 			break;
-		}
 
 		curProc = VTranslate(&ctx->process, dirBase, virtProcess);
-		if (!curProc) {
-			list.size--;
+		if (!curProc)
 			break;
-		}
 	}
 
+	list.size--;
+
 	return list;
+}
+
+WinModuleList GenerateModuleList(WinCtx* ctx, WinProcess* process)
+{
+	WinModuleList list;
+	list.count = 0;
+	list.list = (WinModule*)malloc(sizeof(WinModule) * 25);
+
+	size_t maxSize = 25;
+	char x86 = 0;
+
+	FillModuleList64(ctx, process, &list, &maxSize, &x86);
+
+	if (x86)
+		FillModuleList32(ctx, process, &list, &maxSize);
+
+	return list;
+}
+
+void FreeModuleList(WinModuleList list)
+{
+	if (!list.list)
+		return;
+	for (size_t i = 0; i < list.count; i++)
+		free(list.list[i].name);
+	free(list.list);
+	list.list = NULL;
+}
+
+WinModule* GetModuleInfo(WinModuleList list, const char* moduleName)
+{
+	for (size_t i = 0; i < list.count; i++)
+		if (!strcmp(list.list[i].name, moduleName))
+			return list.list + i;
+	return NULL;
+}
+
+PEB GetPeb(WinCtx* ctx, WinProcess* process)
+{
+	PEB peb;
+	uint64_t ppeb = MemReadU64(&ctx->process, process->physProcess + ctx->offsets.peb);
+	VMemRead(&ctx->process, process->dirBase, (uint64_t)&peb, ppeb, sizeof(PEB));
+	return peb;
+}
+
+PEB32 GetPeb32(WinCtx* ctx, WinProcess* process)
+{
+	PEB32 peb;
+	uint64_t ethread = MemReadU64(&ctx->process, process->physProcess + ctx->offsets.threadListHead) - ctx->offsets.threadListEntry;
+	uint64_t teb = VMemReadU64(&ctx->process, process->dirBase, ethread + ctx->offsets.teb) + 0x2000;
+	uint32_t ppeb;
+	VMemRead(&ctx->process, process->dirBase, (uint64_t)&ppeb, teb + ctx->offsets.peb32, sizeof(ppeb));
+	VMemRead(&ctx->process, process->dirBase, (uint64_t)&peb, ppeb, sizeof(PEB32));
+	return peb;
 }
 
 
@@ -341,7 +409,7 @@ static uint16_t GetNTVersion(WinCtx* ctx)
 static int SetupOffsets(WinCtx* ctx)
 {
 	switch (ctx->ntVersion) {
-	  case 502: /* XP */
+	  case 502: /* XP SP2 */
 		  ctx->offsets = (WinOffsets){
 			  .apl = 0xe0,
 			  .session = 0x260,
@@ -349,9 +417,9 @@ static int SetupOffsets(WinCtx* ctx)
 			  .dirBase = 0x28,
 			  .peb = 0x2c0,
 			  .peb32 = 0x30,
-			  .threadListHead = 0x30,
-			  .threadListEntry = 0x2f8,
-			  .teb = 0xf0
+			  .threadListHead = 0x290,
+			  .threadListEntry = 0x3d0,
+			  .teb = 0xb0
 		  };
 		  break;
 	  case 601: /* W7 */
@@ -362,9 +430,9 @@ static int SetupOffsets(WinCtx* ctx)
 			  .dirBase = 0x28,
 			  .peb = 0x338,
 			  .peb32 = 0x30,
-			  .threadListHead = 0x30,
-			  .threadListEntry = 0x2f8,
-			  .teb = 0xf0
+			  .threadListHead = 0x300,
+			  .threadListEntry = 0x420, /* 0x428 on later SP1 */
+			  .teb = 0xb8
 		  };
 		  /* SP1 */
 		  if (ctx->ntBuild == 7601)
@@ -378,8 +446,8 @@ static int SetupOffsets(WinCtx* ctx)
 			  .dirBase = 0x28,
 			  .peb = 0x338, /*peb will be wrong on Windows 8 and 8.1*/
 			  .peb32 = 0x30,
-			  .threadListHead = 0x30,
-			  .threadListEntry = 0x2f8,
+			  .threadListHead = 0x470,
+			  .threadListEntry = 0x400,
 			  .teb = 0xf0
 		  };
 		  break;
@@ -391,8 +459,8 @@ static int SetupOffsets(WinCtx* ctx)
 			  .dirBase = 0x28,
 			  .peb = 0x338,
 			  .peb32 = 0x30,
-			  .threadListHead = 0x30,
-			  .threadListEntry = 0x2f8,
+			  .threadListHead = 0x470,
+			  .threadListEntry = 0x688, /* 0x650 on previous builds */
 			  .teb = 0xf0
 		  };
 		  break;
@@ -404,8 +472,8 @@ static int SetupOffsets(WinCtx* ctx)
 			  .dirBase = 0x28,
 			  .peb = 0x3f8,
 			  .peb32 = 0x30,
-			  .threadListHead = 0x30,
-			  .threadListEntry = 0x2f8,
+			  .threadListHead = 0x488,
+			  .threadListEntry = 0x6a8,
 			  .teb = 0xf0
 		  };
 		  break;
@@ -413,4 +481,91 @@ static int SetupOffsets(WinCtx* ctx)
 		  return 1;
 	}
 	return 0;
+}
+
+static void FillModuleList64(WinCtx* ctx, WinProcess* process, WinModuleList* list, size_t* maxSize, char* x86)
+{
+	PEB peb = GetPeb(ctx, process);
+	PEB_LDR_DATA ldr;
+	VMemRead(&ctx->process, process->dirBase, (uint64_t)&ldr, peb.Ldr, sizeof(ldr));
+
+	uint64_t head = ldr.InMemoryOrderModuleList.f_link;
+	uint64_t end = head;
+	uint64_t prev = head+1;
+
+	do {
+		if (list->count >= *maxSize) {
+			*maxSize *= 2;
+			WinModule* newList = (WinModule*)realloc(list->list, sizeof(WinModule) * *maxSize);
+			if (!newList)
+				break;
+			list->list = newList;
+		}
+		prev = head;
+
+		LDR_MODULE mod;
+		VMemRead(&ctx->process, process->dirBase, (uint64_t)&mod, head - sizeof(LIST_ENTRY), sizeof(mod));
+		VMemRead(&ctx->process, process->dirBase, (uint64_t)&head, head, sizeof(head));
+
+		if (!mod.BaseDllName.length || !mod.SizeOfImage)
+			continue;
+
+		wchar_t buf[mod.BaseDllName.length];
+		VMemRead(&ctx->process, process->dirBase, (uint64_t)buf, mod.BaseDllName.buffer, mod.BaseDllName.length * sizeof(wchar_t));
+		char* buf2 = (char*)malloc(mod.BaseDllName.length);
+		for (int i = 0; i < mod.BaseDllName.length; i++)
+			buf2[i] = ((char*)buf)[i*2];
+		buf2[mod.BaseDllName.length-1] = '\0';
+		list->list[list->count].name = buf2;
+		list->list[list->count].baseAddress = mod.BaseAddress;
+		list->list[list->count].entryPoint = mod.EntryPoint;
+		list->list[list->count].sizeOfModule = mod.SizeOfImage;
+		list->list[list->count].loadCount = mod.LoadCount;
+		list->count++;
+
+		if (!strcmp(buf2, "wow64.dll"))
+			*x86 = 1;
+	} while (head != end && head != prev);
+}
+
+static void FillModuleList32(WinCtx* ctx, WinProcess* process, WinModuleList* list, size_t* maxSize)
+{
+	PEB32 peb = GetPeb32(ctx, process);
+	PEB_LDR_DATA32 ldr;
+	VMemRead(&ctx->process, process->dirBase, (uint64_t)&ldr, peb.Ldr, sizeof(ldr));
+
+	uint32_t head = ldr.InMemoryOrderModuleList.f_link;
+	uint32_t end = head;
+	uint32_t prev = head+1;
+
+	do {
+		if (list->count >= *maxSize) {
+			*maxSize *= 2;
+			WinModule* newList = (WinModule*)realloc(list->list, sizeof(WinModule) * *maxSize);
+			if (!newList)
+				break;
+			list->list = newList;
+		}
+		prev = head;
+
+		LDR_MODULE32 mod;
+		VMemRead(&ctx->process, process->dirBase, (uint64_t)&mod, head - sizeof(LIST_ENTRY32), sizeof(mod));
+		VMemRead(&ctx->process, process->dirBase, (uint64_t)&head, head, sizeof(head));
+
+		if (!mod.BaseDllName.length || !mod.SizeOfImage)
+			continue;
+
+		wchar_t buf[mod.BaseDllName.length];
+		VMemRead(&ctx->process, process->dirBase, (uint64_t)buf, mod.BaseDllName.buffer, mod.BaseDllName.length * sizeof(wchar_t));
+		char* buf2 = (char*)malloc(mod.BaseDllName.length);
+		for (int i = 0; i < mod.BaseDllName.length; i++)
+			buf2[i] = ((char*)buf)[i*2];
+		buf2[mod.BaseDllName.length-1] = '\0';
+		list->list[list->count].name = buf2;
+		list->list[list->count].baseAddress = mod.BaseAddress;
+		list->list[list->count].entryPoint = mod.EntryPoint;
+		list->list[list->count].sizeOfModule = mod.SizeOfImage;
+		list->list[list->count].loadCount = mod.LoadCount;
+		list->count++;
+	} while (head != end && head != prev);
 }
