@@ -31,15 +31,26 @@ void init()
 		WinContext ctx(pid);
 		ctx.processList.Refresh();
 
+		fprintf(out, "Process List:\n");
+		for (auto& i : ctx.processList)
+			fprintf(out, "%.4lx\t%s\n", i.proc.pid, i.proc.name);
+
 		for (auto& i : ctx.processList) {
-			fprintf(out, "%s\n", i.proc.name);
-			if (!strcmp("csgo.exe", i.proc.name))
+			if (!strcasecmp("steam.exe", i.proc.name)) {
+				fprintf(out, "\nLooping process %lx:\t%s\n", i.proc.pid, i.proc.name);
+
+				PEB peb = i.GetPeb();
+				short magic = i.Read<short>(peb.ImageBaseAddress);
+				fprintf(out, "\tBase:\t%lx\tMagic:\t%hx (valid: %hhx)\n", peb.ImageBaseAddress, magic, (char)(magic == IMAGE_DOS_SIGNATURE));
+
+				fprintf(out, "\tExports:\n");
 				for (auto& o : i.modules) {
-					fprintf(out, "\t%s\n", o.info.name);
-					if (!strcmp("serverbrowser.dll", o.info.name))
+					fprintf(out, "\t%.8lx\t%.8lx\t%lx\t%s\n", o.info.baseAddress, o.info.entryPoint, o.info.sizeOfModule, o.info.name);
+					if (!strcmp("Steam.exe", o.info.name))
 						for (auto& u : o.exports)
 							fprintf(out, "\t\t%lx\t%s\n", u.address, u.name);
 				}
+			}
 		}
 
 	} catch (VMException& e) {

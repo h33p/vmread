@@ -4,6 +4,7 @@
 /* A high level C++ wrapper for various memory functions */
 
 #include "wintools.h"
+#include "mem.h"
 
 #include <stdexcept>
 #include <string.h>
@@ -94,9 +95,7 @@ class WinExportIteratableList
 class WinDll
 {
   public:
-
 	uint64_t GetProcAddress(const char* procName);
-
 	WinDll();
 	WinDll(WinCtx* c, WinProc* p, WinModule& i);
 	WinDll(WinDll&& rhs);
@@ -118,12 +117,7 @@ class WinDll
 	friend WinExportIteratableList;
 	WinCtx* ctx;
 	WinProc* process;
-
-	void VerifyExportList()
-	{
-		if (!exports.list.list)
-			GenerateExportList(ctx, process, info.baseAddress, &exports.list);
-	}
+	void VerifyExportList();
 };
 
 class ModuleIteratableList
@@ -135,7 +129,7 @@ class ModuleIteratableList
   private:
 	friend iterator;
 	friend class WinProcess;
-
+	class WinProcess* process;
 	WinDll* list;
 	size_t size;
 };
@@ -143,14 +137,27 @@ class ModuleIteratableList
 class WinProcess
 {
   public:
-
 	WinDll* GetModuleInfo(const char* moduleName);
-
+	PEB GetPeb();
 	WinProcess();
 	WinProcess(WinProc& p, WinCtx* c);
 	WinProcess(WinProcess&& rhs);
 	WinProcess(WinProcess& rhs) = delete;
 	~WinProcess();
+
+	template<typename T>
+	T Read(uint64_t address)
+	{
+		T ret;
+		VMemRead(&ctx->process, proc.dirBase, (uint64_t)&ret, address, sizeof(T));
+		return ret;
+	}
+
+	template<typename T>
+	void Write(uint64_t address, T& value)
+	{
+		VMemWrite(&ctx->process, proc.dirBase, (uint64_t)&value, address, sizeof(T));
+	}
 
 	auto& operator=(WinProcess rhs)
 	{
@@ -173,13 +180,10 @@ class WinProcessList
 {
   public:
 	using iterator = WinListIterator<WinProcessList>;
-
 	void Refresh();
 	WinProcess* FindProc(const char* name);
-
 	iterator begin();
 	iterator end();
-
 	WinProcessList();
 	WinProcessList(WinCtx* pctx);
 	WinProcessList(WinProcessList&& rhs);
@@ -205,6 +209,21 @@ class WinProcessList
 class WinContext
 {
   public:
+
+	template<typename T>
+	T Read(uint64_t address)
+	{
+		T ret;
+		MemRead(&ctx.process, (uint64_t)&ret, address, sizeof(T));
+		return ret;
+	}
+
+	template<typename T>
+	void Write(uint64_t address, T& value)
+	{
+		MemWrite(&ctx.process, (uint64_t)&value, address, sizeof(T));
+	}
+
 	WinContext(pid_t pid)
 	{
 	    int ret = InitializeContext(&ctx, pid);

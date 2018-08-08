@@ -52,7 +52,7 @@ int InitializeContext(WinCtx* ctx, pid_t pid)
 	ctx->ntKernel = FindNTKernel(ctx, kernelEntry);
 
 	if (!ctx->ntKernel) {
-		/* Test in case we are running XP (QEMU offsets are different) */
+		/* Test in case we are running XP (QEMU AddressSpace is different) */
 #if (LMODE() != MODE_DMA())
 		KFIXC = 0x40000000ll * 4;
 		KFIXO = 0x40000000;
@@ -230,22 +230,25 @@ WinProcList GenerateProcessList(WinCtx* ctx)
 	size_t maxSize = 25;
 
 	while (!list.size || curProc != ctx->initialProcess.physProcess) {
-		uint64_t pid = MemReadU64(&ctx->process, curProc + ctx->offsets.apl - 8);
+		uint64_t session = MemReadU64(&ctx->process, curProc + ctx->offsets.session);
 		uint64_t dirBase = MemReadU64(&ctx->process, curProc + ctx->offsets.dirBase);
+		if (session) {
+			uint64_t pid = MemReadU64(&ctx->process, curProc + ctx->offsets.apl - 8);
 
-		list.list[list.size] = (WinProc){
-			.process = virtProcess,
-			.physProcess = curProc,
-			.dirBase = dirBase,
-			.pid = pid,
-		};
+			list.list[list.size] = (WinProc){
+				.process = virtProcess,
+				.physProcess = curProc,
+				.dirBase = dirBase,
+				.pid = pid,
+			};
 
-		MemRead(&ctx->process, (uint64_t)list.list[list.size].name, curProc + ctx->offsets.imageFileName, 15);
-		list.list[list.size].name[15] = '\0';
+			MemRead(&ctx->process, (uint64_t)list.list[list.size].name, curProc + ctx->offsets.imageFileName, 15);
+			list.list[list.size].name[15] = '\0';
 
-		list.size++;
-		if (list.size > 1000 || pid == 0)
-			break;
+			list.size++;
+			if (list.size > 1000 || pid == 0)
+				break;
+		}
 
 		if (list.size >= maxSize) {
 			maxSize = list.size * 2;
@@ -519,6 +522,12 @@ static void FillModuleList64(WinCtx* ctx, WinProc* process, WinModuleList* list,
 		for (int i = 0; i < mod.BaseDllName.length; i++)
 			buf2[i] = ((char*)buf)[i*2];
 		buf2[mod.BaseDllName.length-1] = '\0';
+
+		if (*(short*)buf2 == 0x53) { /* 'S\0', a bit of magic, but it works */
+			free(buf2);
+			continue;
+		}
+
 		list->list[list->size].name = buf2;
 		list->list[list->size].baseAddress = mod.BaseAddress;
 		list->list[list->size].entryPoint = mod.EntryPoint;
@@ -564,6 +573,12 @@ static void FillModuleList32(WinCtx* ctx, WinProc* process, WinModuleList* list,
 		for (int i = 0; i < mod.BaseDllName.length; i++)
 			buf2[i] = ((char*)buf)[i*2];
 		buf2[mod.BaseDllName.length-1] = '\0';
+
+		if (*(short*)buf2 == 0x53) {
+			free(buf2);
+			continue;
+		}
+
 		list->list[list->size].name = buf2;
 		list->list[list->size].baseAddress = mod.BaseAddress;
 		list->list[list->size].entryPoint = mod.EntryPoint;

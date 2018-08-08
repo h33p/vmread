@@ -2,11 +2,13 @@
 
 ModuleIteratableList::iterator ModuleIteratableList::begin()
 {
+	process->VerifyModuleList();
 	return iterator(this);
 }
 
 ModuleIteratableList::iterator ModuleIteratableList::end()
 {
+	process->VerifyModuleList();
 	return iterator(this, size);
 }
 
@@ -19,20 +21,23 @@ WinDll* WinProcess::GetModuleInfo(const char* moduleName)
 	return nullptr;
 }
 
+PEB WinProcess::GetPeb()
+{
+	return ::GetPeb(ctx, &proc);
+}
+
 WinProcess::WinProcess()
 {
 	ctx = nullptr;
 	modules.list = nullptr;
 	modules.size = 0;
+	modules.process = this;
 }
 
-WinProcess::WinProcess(WinProc& p, WinCtx* c)
+WinProcess::WinProcess(WinProc& p, WinCtx* c) : WinProcess()
 {
 	proc = p;
 	ctx = c;
-	modules.list = nullptr;
-	modules.size = 0;
-	VerifyModuleList();
 }
 
 WinProcess::WinProcess(WinProcess&& rhs)
@@ -41,6 +46,7 @@ WinProcess::WinProcess(WinProcess&& rhs)
 	ctx = rhs.ctx;
 	modules.list = rhs.modules.list;
 	modules.size = rhs.modules.size;
+	modules.process = this;
 	rhs.modules.list = nullptr;
 	rhs.modules.size = 0;
 }

@@ -41,6 +41,7 @@ WinDll::WinDll(WinDll&& rhs)
 	process = rhs.process;
 	ctx = rhs.ctx;
 	exports = rhs.exports;
+	exports.windll = this;
 	rhs.exports.list.list = nullptr;
 	rhs.exports.list.size = 0;
 }
@@ -48,4 +49,10 @@ WinDll::WinDll(WinDll&& rhs)
 WinDll::~WinDll()
 {
 	FreeExportList(exports.list);
+}
+
+void WinDll::VerifyExportList()
+{
+	if (!exports.list.list)
+		GenerateExportList(ctx, process, info.baseAddress, &exports.list);
 }
