@@ -4,7 +4,7 @@
 #include <errno.h>
 #include <string.h>
 
-char* strdup(char*);
+char* strdup(const char*);
 
 static int CheckLow(WinCtx* ctx, uint64_t* pml4, uint64_t* kernelEntry);
 static uint64_t FindNTKernel(WinCtx* ctx, uint64_t kernelEntry);
@@ -152,7 +152,7 @@ int ParseExportTable(WinCtx* ctx, WinProc* process, uint64_t moduleBase, IMAGE_D
 
 	size_t sz = 0;
 
-	for (int i = 0; i < exportDir->NumberOfNames; i++) {
+	for (uint32_t i = 0; i < exportDir->NumberOfNames; i++) {
 		if (names[i] > exports->Size + exportOffset || names[i] < exportOffset || ordinals[i] > exportDir->NumberOfNames)
 			continue;
 		outList->list[sz].name = strdup(buf + names[i] - exportOffset);
@@ -190,7 +190,7 @@ void FreeExportList(WinExportList list)
 	if (!list.list)
 		return;
 
-	for (int i = 0; i < list.size; i++)
+	for (uint32_t i = 0; i < list.size; i++)
 		free((char*)list.list[i].name);
 
 	free(list.list);
@@ -212,7 +212,7 @@ uint64_t GetProcAddress(WinCtx* ctx, WinProc* process, uint64_t module, const ch
 
 uint64_t FindProcAddress(WinExportList exports, const char* procName)
 {
-	for (int i = 0; i < exports.size; i++)
+	for (uint32_t i = 0; i < exports.size; i++)
 		if (!strcmp(procName, exports.list[i].name))
 			return exports.list[i].address;
 	return 0;
@@ -232,9 +232,8 @@ WinProcList GenerateProcessList(WinCtx* ctx)
 	while (!list.size || curProc != ctx->initialProcess.physProcess) {
 		uint64_t session = MemReadU64(&ctx->process, curProc + ctx->offsets.session);
 		uint64_t dirBase = MemReadU64(&ctx->process, curProc + ctx->offsets.dirBase);
-		if (session) {
-			uint64_t pid = MemReadU64(&ctx->process, curProc + ctx->offsets.apl - 8);
-
+		uint64_t pid = MemReadU64(&ctx->process, curProc + ctx->offsets.apl - 8);
+		if (session || pid == 4) {
 			list.list[list.size] = (WinProc){
 				.process = virtProcess,
 				.physProcess = curProc,

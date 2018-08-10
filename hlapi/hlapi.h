@@ -3,8 +3,8 @@
 
 /* A high level C++ wrapper for various memory functions */
 
-#include "wintools.h"
-#include "mem.h"
+#include "../wintools.h"
+#include "../mem.h"
 
 #include <stdexcept>
 #include <string.h>
@@ -126,6 +126,7 @@ class ModuleIteratableList
 	using iterator = WinListIterator<ModuleIteratableList>;
 	iterator begin();
 	iterator end();
+        size_t getSize();
   private:
 	friend iterator;
 	friend class WinProcess;
@@ -238,7 +239,6 @@ class WinContext
 	}
 
 	WinProcessList processList;
-  private:
 	WinCtx ctx;
 };
 

@@ -12,6 +12,12 @@ ModuleIteratableList::iterator ModuleIteratableList::end()
 	return iterator(this, size);
 }
 
+size_t ModuleIteratableList::getSize()
+{
+	process->VerifyModuleList();
+	return size;
+}
+
 WinDll* WinProcess::GetModuleInfo(const char* moduleName)
 {
 	VerifyModuleList();
