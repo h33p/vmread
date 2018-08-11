@@ -233,6 +233,8 @@ WinProcList GenerateProcessList(WinCtx* ctx)
 		uint64_t session = MemReadU64(&ctx->process, curProc + ctx->offsets.session);
 		uint64_t dirBase = MemReadU64(&ctx->process, curProc + ctx->offsets.dirBase);
 		uint64_t pid = MemReadU64(&ctx->process, curProc + ctx->offsets.apl - 8);
+
+		//Check if process is running by checking the session. System process never has a session, and this session checking does not seem to fully work on XP
 		if (session || pid == 4) {
 			list.list[list.size] = (WinProc){
 				.process = virtProcess,

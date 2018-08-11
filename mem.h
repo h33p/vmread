@@ -26,6 +26,8 @@ uint64_t MemReadU64(ProcessData* data, uint64_t remote);
 uint64_t MemWriteU64(ProcessData* data, uint64_t remote);
 int VMemRead(ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remote, size_t size);
 int VMemWrite(ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remote, size_t size);
+int VMemReadMul(ProcessData* data, uint64_t dirBase, RWInfo* info, size_t num);
+int VMemWriteMul(ProcessData* data, uint64_t dirBase, RWInfo* info, size_t num);
 uint64_t VTranslate(ProcessData* data, uint64_t dirBase, uint64_t address);
 
 #ifdef __cplusplus

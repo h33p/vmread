@@ -28,6 +28,7 @@ WinProcess* WinProcessList::FindProc(const char* name)
 	for (auto& i : *this)
 		if (!strcmp(name, i.proc.name))
 			return &i;
+
 	return nullptr;
 }
 

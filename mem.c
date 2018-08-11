@@ -4,6 +4,8 @@
 
 const uint64_t PMASK = (~0xfull << 8) & 0xfffffffffull;
 static void FillRWInfo(ProcessData* data, uint64_t dirBase, RWInfo* info, int* count, uint64_t local, uint64_t remote, size_t len);
+static int FillRWInfoMul(ProcessData* data, uint64_t dirBase, RWInfo* origData, RWInfo* info, size_t count);
+static int CalculateDataCount(RWInfo* info, size_t count);
 
 int VMemRead(ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remote, size_t size)
 {
@@ -19,7 +21,7 @@ int VMemRead(ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remot
 int VMemWrite(ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remote, size_t size)
 {
 	if ((remote >> 12ull) == ((remote + size) >> 12ull))
-		return MemWrite(data, VTranslate(data, dirBase, remote), local, size);
+		return MemWrite(data, local, VTranslate(data, dirBase, remote), size);
 
 	int dataCount = ((size - 1) / 0x1000) + 2;
 	RWInfo wdata[dataCount];
@@ -53,6 +55,22 @@ uint64_t MemWriteU64(ProcessData* data, uint64_t remote)
 	uint64_t dest;
 	MemRead(data, (uint64_t)&dest, remote, sizeof(uint64_t));
 	return dest;
+}
+
+int VMemReadMul(ProcessData* data, uint64_t dirBase, RWInfo* info, size_t num)
+{
+	int dataCount = CalculateDataCount(info, num);
+	RWInfo readInfo[dataCount];
+	dataCount = FillRWInfoMul(data, dirBase, info, readInfo, num);
+	return MemReadMul(data, readInfo, dataCount);
+}
+
+int VMemWriteMul(ProcessData* data, uint64_t dirBase, RWInfo* info, size_t num)
+{
+	int dataCount = CalculateDataCount(info, num);
+	RWInfo writeInfo[dataCount];
+	dataCount = FillRWInfoMul(data, dirBase, info, writeInfo, num);
+	return MemWriteMul(data, writeInfo, dataCount);
 }
 
 /*
@@ -98,6 +116,37 @@ uint64_t VTranslate(ProcessData* data, uint64_t dirBase, uint64_t address)
 }
 
 /* Static functions */
+
+static int CalculateDataCount(RWInfo* info, size_t count)
+{
+	int ret = 0;
+
+	for (size_t i = 0; i < count; i++) {
+		if ((info[i].remote >> 12ull) == ((info[i].remote + info[i].size) >> 12ull))
+		    ret++;
+		else
+			ret += ((info[i].size - 1) / 0x1000) + 2;
+	}
+
+	return ret;
+}
+
+static int FillRWInfoMul(ProcessData* data, uint64_t dirBase, RWInfo* origData, RWInfo* info, size_t count)
+{
+	int ret = 0;
+	for (size_t i = 0; i < count; i++) {
+		if ((origData[i].remote >> 12ull) == ((origData[i].remote + origData[i].size) >> 12ull)) {
+			info[ret] = origData[i];
+			info[ret].remote = VTranslate(data, dirBase, info[ret].remote);
+		    ret++;
+		} else {
+			int count = 0;
+			FillRWInfo(data, dirBase, info + ret, &count, origData[i].local, origData[i].remote, origData[i].size);
+			ret += count;
+		}
+	}
+	return ret;
+}
 
 static void FillRWInfo(ProcessData* data, uint64_t dirBase, RWInfo* info, int* count, uint64_t local, uint64_t remote, size_t len)
 {

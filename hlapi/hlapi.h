@@ -8,6 +8,7 @@
 
 #include <stdexcept>
 #include <string.h>
+#include <stack>
 
 class VMException : public std::exception
 {
@@ -126,13 +127,34 @@ class ModuleIteratableList
 	using iterator = WinListIterator<ModuleIteratableList>;
 	iterator begin();
 	iterator end();
-        size_t getSize();
+	size_t getSize();
   private:
 	friend iterator;
 	friend class WinProcess;
 	class WinProcess* process;
 	WinDll* list;
 	size_t size;
+};
+
+class WriteList
+{
+  public:
+	WriteList(WinProcess*);
+	~WriteList();
+	void Commit();
+
+	template<typename T>
+	void Write(uint64_t address, T& value)
+	{
+		T* copy = (T*)malloc(sizeof(T));
+		*copy = value;
+		writeList.push({(uint64_t)copy, address, sizeof(T)});
+	}
+
+  private:
+	std::stack<RWInfo> writeList;
+	WinCtx* ctx;
+	WinProc* proc;
 };
 
 class WinProcess
@@ -155,7 +177,7 @@ class WinProcess
 	}
 
 	template<typename T>
-	void Write(uint64_t address, T& value)
+	void Write(uint64_t address, const T& value)
 	{
 		VMemWrite(&ctx->process, proc.dirBase, (uint64_t)&value, address, sizeof(T));
 	}
@@ -173,6 +195,7 @@ class WinProcess
 	ModuleIteratableList modules;
   protected:
 	friend ModuleIteratableList;
+	friend WriteList;
 	WinCtx* ctx;
 	void VerifyModuleList();
 };
