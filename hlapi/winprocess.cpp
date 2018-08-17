@@ -26,29 +26,23 @@ WriteList::WriteList(WinProcess* p)
 
 WriteList::~WriteList()
 {
-    while (writeList.size()) {
-		free((void*)writeList.top().local);
-		writeList.pop();
-	}
+	size_t sz = writeList.size();
+	for (size_t i = 0; i < sz; i++)
+		free((void*)writeList[i].local);
 }
 
 void WriteList::Commit()
 {
 	size_t sz = writeList.size();
-	RWInfo* infos = new RWInfo[sz];
 
-    size_t i = 0;
-    while (writeList.size()) {
-		infos[i++] = writeList.top();
-		writeList.pop();
-	}
+	RWInfo* infos = writeList.data();
 
 	VMemWriteMul(&ctx->process, proc->dirBase, infos, sz);
 
-	for (i = 0; i < sz; i++)
+	for (size_t i = 0; i < sz; i++)
 		free((void*)infos[i].local);
 
-	delete[] infos;
+	writeList.clear();
 }
 
 WinDll* WinProcess::GetModuleInfo(const char* moduleName)

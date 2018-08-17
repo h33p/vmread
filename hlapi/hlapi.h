@@ -8,7 +8,7 @@
 
 #include <stdexcept>
 #include <string.h>
-#include <stack>
+#include <vector>
 
 class VMException : public std::exception
 {
@@ -148,11 +148,11 @@ class WriteList
 	{
 		T* copy = (T*)malloc(sizeof(T));
 		*copy = value;
-		writeList.push({(uint64_t)copy, address, sizeof(T)});
+		writeList.push_back({(uint64_t)copy, address, sizeof(T)});
 	}
 
   private:
-	std::stack<RWInfo> writeList;
+	std::vector<RWInfo> writeList;
 	WinCtx* ctx;
 	WinProc* proc;
 };
