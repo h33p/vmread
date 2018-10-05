@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string.h>
 #include <vector>
+#include <algorithm>
 
 class VMException : public std::exception
 {
@@ -146,13 +147,14 @@ class WriteList
 	template<typename T>
 	void Write(uint64_t address, T& value)
 	{
-		T* copy = (T*)malloc(sizeof(T));
-		*copy = value;
-		writeList.push_back({(uint64_t)copy, address, sizeof(T)});
+		writeList.push_back({(uint64_t)buffer.size(), address, sizeof(T)});
+		buffer.reserve(sizeof(T));
+		std::copy((char*)&value, (char*)&value + sizeof(T), std::back_inserter(buffer));
 	}
 
   private:
 	std::vector<RWInfo> writeList;
+	std::vector<char> buffer;
 	WinCtx* ctx;
 	WinProc* proc;
 };

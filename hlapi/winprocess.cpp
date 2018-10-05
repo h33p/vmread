@@ -37,12 +37,15 @@ void WriteList::Commit()
 
 	RWInfo* infos = writeList.data();
 
-	VMemWriteMul(&ctx->process, proc->dirBase, infos, sz);
+	uint64_t bufmem = (uint64_t)buffer.data();
 
 	for (size_t i = 0; i < sz; i++)
-		free((void*)infos[i].local);
+		infos[i].local += bufmem;
+
+	VMemWriteMul(&ctx->process, proc->dirBase, infos, sz);
 
 	writeList.clear();
+	buffer.clear();
 }
 
 WinDll* WinProcess::GetModuleInfo(const char* moduleName)
