@@ -2,6 +2,10 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifndef NO_ASSERTS
+#include <assert.h>
+#endif
+
 const uint64_t PMASK = (~0xfull << 8) & 0xfffffffffull;
 static void FillRWInfo(ProcessData* data, uint64_t dirBase, RWInfo* info, int* count, uint64_t local, uint64_t remote, size_t len);
 static int FillRWInfoMul(ProcessData* data, uint64_t dirBase, RWInfo* origData, RWInfo* info, size_t count);
@@ -121,12 +125,8 @@ static int CalculateDataCount(RWInfo* info, size_t count)
 {
 	int ret = 0;
 
-	for (size_t i = 0; i < count; i++) {
-		if ((info[i].remote >> 12ull) == ((info[i].remote + info[i].size) >> 12ull))
-		    ret++;
-		else
-			ret += ((info[i].size - 1) / 0x1000) + 2;
-	}
+	for (size_t i = 0; i < count; i++)
+		ret += ((info[i].remote + info[i].size - 1) >> 12ull) - (info[i].remote >> 12ull);
 
 	return ret;
 }
@@ -135,15 +135,9 @@ static int FillRWInfoMul(ProcessData* data, uint64_t dirBase, RWInfo* origData, 
 {
 	int ret = 0;
 	for (size_t i = 0; i < count; i++) {
-		if ((origData[i].remote >> 12ull) == ((origData[i].remote + origData[i].size) >> 12ull)) {
-			info[ret] = origData[i];
-			info[ret].remote = VTranslate(data, dirBase, info[ret].remote);
-		    ret++;
-		} else {
-			int count = 0;
-			FillRWInfo(data, dirBase, info + ret, &count, origData[i].local, origData[i].remote, origData[i].size);
-			ret += count;
-		}
+		int count = 0;
+		FillRWInfo(data, dirBase, info + ret, &count, origData[i].local, origData[i].remote, origData[i].size);
+		ret += count;
 	}
 	return ret;
 }
@@ -155,17 +149,32 @@ static void FillRWInfo(ProcessData* data, uint64_t dirBase, RWInfo* info, int* c
 	info[0].remote = VTranslate(data, dirBase, remote);
 	info[0].size = 0x1000 - (remote & 0xfff);
 
-	uint64_t curAddress = (remote & ~0xfff) + 0x1000;
+	uint64_t curSize = info[0].size;
+
+#ifndef NO_ASSERTS
+	assert(!((remote + curSize) & 0xfff));
+#endif
+
+	uint64_t tlen = 0;
+
 	int i = 1;
-	for (; curAddress < (remote + len); curAddress += 0x1000) {
-		info[i].local = local + 0x1000 * (i-1) + info[0].size;
-		info[i].remote = VTranslate(data, dirBase, remote + 0x1000 * (i-1) + info[0].size);
-		info[i].size = len - curAddress + remote;
-		if (len > 0x1000)
-			len = 0x1000;
-		if (info[i].remote)
+	for (; curSize < len; curSize += 0x1000) {
+		info[i].local = local + curSize;
+		info[i].remote = VTranslate(data, dirBase, remote + curSize);
+		info[i].size = len - curSize;
+		if (info[i].size > 0x1000)
+		    info[i].size = 0x1000;
+		if (info[i].remote) {
+			tlen += info[i].size;
 			i++;
+		}
+
+		if (tlen > len)
+			printf("LEN EXCEEDED\n");
 	}
+
+	if (tlen > len)
+		printf("LEN EXCEEDED\n");
 
 	*count = i;
 }
