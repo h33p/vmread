@@ -168,13 +168,7 @@ static void FillRWInfo(ProcessData* data, uint64_t dirBase, RWInfo* info, int* c
 			tlen += info[i].size;
 			i++;
 		}
-
-		if (tlen > len)
-			printf("LEN EXCEEDED\n");
 	}
-
-	if (tlen > len)
-		printf("LEN EXCEEDED\n");
 
 	*count = i;
 }
