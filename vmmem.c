@@ -68,7 +68,7 @@ int MemReadMul(ProcessData* data, RWInfo* rdata, size_t num)
 	}
 
 	if (i != startRead)
-	    ret = process_vm_readv(data->pid, local + startRead, i - startRead + 1, remote + startRead, i - startRead + 1, 0);
+	    ret = process_vm_readv(data->pid, local + startRead, i - startRead, remote + startRead, i - startRead, 0);
 
 	return ret;
 }
@@ -102,8 +102,8 @@ int MemWriteMul(ProcessData* data, RWInfo* wdata, size_t num)
 		remote[i].iov_base = (void*)(data->mapsStart + KFIX2(wdata[i].remote));
 		remote[i].iov_len = wdata[i].size;
 
-		if (i - startWrite + 1 >= (size_t)iov_max) {
-			ret = process_vm_readv(data->pid, local + startWrite, iov_max, remote + startWrite, iov_max, 0);
+		if (i - startWrite >= (size_t)iov_max) {
+			ret = process_vm_writev(data->pid, local + startWrite, iov_max, remote + startWrite, iov_max, 0);
 			if (ret == -1)
 				return ret;
 			startWrite = i + 1;
@@ -111,7 +111,7 @@ int MemWriteMul(ProcessData* data, RWInfo* wdata, size_t num)
 	}
 
 	if (i != startWrite)
-	    ret = process_vm_readv(data->pid, local + startWrite, i - startWrite + 1, remote + startWrite, i - startWrite + 1, 0);
+		ret = process_vm_writev(data->pid, local + startWrite, i - startWrite, remote + startWrite, i - startWrite, 0);
 
 	return ret;
 }
