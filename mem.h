@@ -16,19 +16,19 @@ typedef struct RWInfo
 	size_t size;
 } RWInfo;
 
-int MemRead(ProcessData* data, uint64_t local, uint64_t remote, size_t size);
-int MemWrite(ProcessData* data, uint64_t local, uint64_t remote, size_t size);
-int MemReadMul(ProcessData* data, RWInfo* info, size_t num);
-int MemWriteMul(ProcessData* data, RWInfo* info, size_t num);
-uint64_t VMemReadU64(ProcessData* data, uint64_t dirBase, uint64_t remote);
-uint64_t VMemWriteU64(ProcessData* data, uint64_t dirBase, uint64_t remote);
-uint64_t MemReadU64(ProcessData* data, uint64_t remote);
-uint64_t MemWriteU64(ProcessData* data, uint64_t remote);
-int VMemRead(ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remote, size_t size);
-int VMemWrite(ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remote, size_t size);
-int VMemReadMul(ProcessData* data, uint64_t dirBase, RWInfo* info, size_t num);
-int VMemWriteMul(ProcessData* data, uint64_t dirBase, RWInfo* info, size_t num);
-uint64_t VTranslate(ProcessData* data, uint64_t dirBase, uint64_t address);
+ssize_t MemRead(const ProcessData* data, uint64_t local, uint64_t remote, size_t size);
+ssize_t MemWrite(const ProcessData* data, uint64_t local, uint64_t remote, size_t size);
+ssize_t MemReadMul(const ProcessData* data, RWInfo* info, size_t num);
+ssize_t MemWriteMul(const ProcessData* data, RWInfo* info, size_t num);
+uint64_t VMemReadU64(const ProcessData* data, uint64_t dirBase, uint64_t remote);
+uint64_t VMemWriteU64(const ProcessData* data, uint64_t dirBase, uint64_t remote);
+uint64_t MemReadU64(const ProcessData* data, uint64_t remote);
+uint64_t MemWriteU64(const ProcessData* data, uint64_t remote);
+ssize_t VMemRead(const ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remote, size_t size);
+ssize_t VMemWrite(const ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remote, size_t size);
+ssize_t VMemReadMul(const ProcessData* data, uint64_t dirBase, RWInfo* info, size_t num);
+ssize_t VMemWriteMul(const ProcessData* data, uint64_t dirBase, RWInfo* info, size_t num);
+uint64_t VTranslate(const ProcessData* data, uint64_t dirBase, uint64_t address);
 
 #ifdef __cplusplus
 }

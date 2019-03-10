@@ -142,7 +142,7 @@ procmaps_struct* pmparser_parse(int pid){
 	procmaps_struct* current_node=list_maps;
 	char addr1[20],addr2[20], perm[8], offset[20], dev[10],inode[30],pathname[600];
 	while(1){
-		if( (c=fgetc(file))==EOF ) break;
+		if( (c=(char)fgetc(file))==EOF ) break;
 		fgets(buf+1,259,file);
 		buf[0]=c;
 		tmp= (procmaps_struct*)malloc(sizeof(procmaps_struct));

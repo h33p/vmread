@@ -8,9 +8,9 @@
 
 typedef struct ProcessData
 {
-	pid_t pid;
 	uint64_t mapsStart;
 	uint64_t mapsSize;
+	pid_t pid;
 } ProcessData;
 
 extern FILE* dfile;

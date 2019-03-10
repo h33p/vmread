@@ -28,9 +28,9 @@ ssize_t process_vm_writev(pid_t pid,
 						  unsigned long riovcnt,
 						  unsigned long flags);
 
-static int iov_max = -1;
+static ssize_t iov_max = -1;
 
-int MemRead(ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t len)
+ssize_t MemRead(const ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t len)
 {
 	struct iovec local;
 	struct iovec remote;
@@ -41,14 +41,14 @@ int MemRead(ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t l
 	return process_vm_readv(data->pid, &local, 1, &remote, 1, 0);
 }
 
-int MemReadMul(ProcessData* data, RWInfo* rdata, size_t num)
+ssize_t MemReadMul(const ProcessData* data, RWInfo* rdata, size_t num)
 {
 	struct iovec local[num];
 	struct iovec remote[num];
 	size_t i = 0;
 	size_t startRead = 0;
 
-	int ret = 0;
+	ssize_t ret = 0;
 
 	if (iov_max == -1)
 		iov_max = sysconf(_SC_IOV_MAX);
@@ -73,7 +73,7 @@ int MemReadMul(ProcessData* data, RWInfo* rdata, size_t num)
 	return ret;
 }
 
-int MemWrite(ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t len)
+ssize_t MemWrite(const ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t len)
 {
 	struct iovec local;
 	struct iovec remote;
@@ -84,14 +84,14 @@ int MemWrite(ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t 
 	return process_vm_writev(data->pid, &local, 1, &remote, 1, 0);
 }
 
-int MemWriteMul(ProcessData* data, RWInfo* wdata, size_t num)
+ssize_t MemWriteMul(const ProcessData* data, RWInfo* wdata, size_t num)
 {
 	struct iovec local[num];
 	struct iovec remote[num];
 	size_t i;
 	size_t startWrite = 0;
 
-	int ret = 0;
+	ssize_t ret = 0;
 
 	if (iov_max == -1)
 		iov_max = sysconf(_SC_IOV_MAX);

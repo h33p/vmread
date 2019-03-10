@@ -7,7 +7,7 @@ uint64_t KFIXC = 0x80000000;
 uint64_t KFIXO = 0x80000000;
 #define KFIX2(x) ((x) < KFIXC ? (x) : ((x) - KFIXO))
 
-int MemRead(ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t len)
+ssize_t MemRead(const ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t len)
 {
 	uint64_t remote = KFIX2(remoteAddr);
 	if (remote >= data->mapsSize - len)
@@ -16,9 +16,9 @@ int MemRead(ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t l
 	return len;
 }
 
-int MemReadMul(ProcessData* data, RWInfo* rdata, size_t num)
+ssize_t MemReadMul(const ProcessData* data, RWInfo* rdata, size_t num)
 {
-	int flen = 0;
+    ssize_t flen = 0;
 	size_t i;
 	for (i = 0; i < num; i++) {
 		uint64_t remote = KFIX2(rdata[i].remote);
@@ -30,7 +30,7 @@ int MemReadMul(ProcessData* data, RWInfo* rdata, size_t num)
 	return flen;
 }
 
-int MemWrite(ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t len)
+ssize_t MemWrite(const ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t len)
 {
 	uint64_t remote = KFIX2(remoteAddr);
 	if (remote >= data->mapsSize - len)
@@ -39,9 +39,9 @@ int MemWrite(ProcessData* data, uint64_t localAddr, uint64_t remoteAddr, size_t 
 	return len;
 }
 
-int MemWriteMul(ProcessData* data, RWInfo* wdata, size_t num)
+ssize_t MemWriteMul(const ProcessData* data, RWInfo* wdata, size_t num)
 {
-	int flen = 0;
+	ssize_t flen = 0;
 	size_t i;
 	for (i = 0; i < num; i++) {
 		uint64_t remote = KFIX2(wdata[i].remote);

@@ -1,6 +1,6 @@
-project('vctk', 'cpp', 'c', default_options : ['c_std=c99'])
+project('vctk', 'cpp', 'c', default_options : ['c_std=c99', 'c++_std=c++11'])
 
-compile_args = ['-pedantic', '-Werror', '-DMVERBOSE=4', '-fsanitize=address', '-lasan', '-fmax-errors=10', '-DREAD_CHECK']
+compile_args = ['-pedantic', '-Werror', '-Wno-vla', '-Wno-sign-conversion', '-Wno-c++98-compat', '-Wno-padded', '-Wno-c++98-compat-pedantic', '-Wno-weak-vtables', '-Wno-documentation-unknown-command', '-Wno-old-style-cast', '-Wno-missing-variable-declarations', '-Wno-missing-prototypes', '-Weverything', '-DMVERBOSE=4', '-fsanitize=address', '-DREAD_CHECK']
 
 dl = meson.get_compiler('c').find_library('dl', required : false)
 thread = meson.get_compiler('c').find_library('pthread', required : false)

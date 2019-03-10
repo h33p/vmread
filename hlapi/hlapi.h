@@ -87,7 +87,7 @@ class WinExportIteratableList
 	iterator begin();
 	iterator end();
   private:
-	friend iterator;
+	friend class WinListIterator<WinExportList>;
 	friend class WinDll;
 	class WinDll* windll;
 
@@ -116,7 +116,7 @@ class WinDll
 	WinModule info;
 	WinExportIteratableList exports;
   private:
-	friend WinExportIteratableList;
+	friend class WinExportIteratableList;
 	WinCtx* ctx;
 	WinProc* process;
 	void VerifyExportList();
@@ -130,7 +130,7 @@ class ModuleIteratableList
 	iterator end();
 	size_t getSize();
   private:
-	friend iterator;
+	friend class WinListIterator<ModuleIteratableList>;
 	friend class WinProcess;
 	class WinProcess* process;
 	WinDll* list;
@@ -196,8 +196,8 @@ class WinProcess
 	WinProc proc;
 	ModuleIteratableList modules;
   protected:
-	friend ModuleIteratableList;
-	friend WriteList;
+	friend class ModuleIteratableList;
+	friend class WriteList;
 	WinCtx* ctx;
 	void VerifyModuleList();
 };
