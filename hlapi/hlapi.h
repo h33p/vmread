@@ -89,7 +89,7 @@ class WinExportIteratableList
   private:
 	friend class WinListIterator<WinExportList>;
 	friend class WinDll;
-	class WinDll* windll;
+    class WinDll* windll;
 
 	WinExportList list;
 };
@@ -99,7 +99,7 @@ class WinDll
   public:
 	uint64_t GetProcAddress(const char* procName);
 	WinDll();
-	WinDll(WinCtx* c, WinProc* p, WinModule& i);
+	WinDll(const WinCtx* c, const WinProc* p, WinModule& i);
 	WinDll(WinDll&& rhs);
 	WinDll(WinDll& rhs) = delete;
 	~WinDll();
@@ -115,10 +115,10 @@ class WinDll
 
 	WinModule info;
 	WinExportIteratableList exports;
+	const WinCtx* ctx;
+	const WinProc* process;
   private:
 	friend class WinExportIteratableList;
-	WinCtx* ctx;
-	WinProc* process;
 	void VerifyExportList();
 };
 
@@ -140,7 +140,7 @@ class ModuleIteratableList
 class WriteList
 {
   public:
-	WriteList(WinProcess*);
+	WriteList(const WinProcess*);
 	~WriteList();
 	void Commit();
 
@@ -152,11 +152,11 @@ class WriteList
 		std::copy((char*)&value, (char*)&value + sizeof(T), std::back_inserter(buffer));
 	}
 
+	const WinCtx* ctx;
+	const WinProc* proc;
   private:
 	std::vector<RWInfo> writeList;
 	std::vector<char> buffer;
-	WinCtx* ctx;
-	WinProc* proc;
 };
 
 class WinProcess
@@ -165,10 +165,13 @@ class WinProcess
 	WinDll* GetModuleInfo(const char* moduleName);
 	PEB GetPeb();
 	WinProcess();
-	WinProcess(WinProc& p, WinCtx* c);
+	WinProcess(const WinProc& p, const WinCtx* c);
 	WinProcess(WinProcess&& rhs);
 	WinProcess(WinProcess& rhs) = delete;
 	~WinProcess();
+
+	ssize_t Read(uint64_t address, void* buffer, size_t sz);
+	ssize_t Write(uint64_t address, void* buffer, size_t sz);
 
 	template<typename T>
 	T Read(uint64_t address)
@@ -195,10 +198,10 @@ class WinProcess
 
 	WinProc proc;
 	ModuleIteratableList modules;
+	const WinCtx* ctx;
   protected:
 	friend class ModuleIteratableList;
 	friend class WriteList;
-	WinCtx* ctx;
 	void VerifyModuleList();
 };
 
@@ -211,7 +214,7 @@ class WinProcessList
 	iterator begin();
 	iterator end();
 	WinProcessList();
-	WinProcessList(WinCtx* pctx);
+	WinProcessList(const WinCtx* pctx);
 	WinProcessList(WinProcessList&& rhs);
 	WinProcessList(WinProcessList& rhs) = delete;
 	~WinProcessList();
@@ -224,10 +227,10 @@ class WinProcessList
 		return *this;
 	}
 
+	const WinCtx* ctx;
   protected:
 	friend iterator;
 	WinProcList plist;
-	WinCtx* ctx;
 	WinProcess* list;
 	void FreeProcessList();
 };

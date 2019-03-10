@@ -27,7 +27,7 @@ WinDll::WinDll()
 	exports.windll = this;
 }
 
-WinDll::WinDll(WinCtx* c, WinProc* p, WinModule& i)
+WinDll::WinDll(const WinCtx* c, const WinProc* p, WinModule& i)
 	: WinDll()
 {
 	ctx = c;

@@ -40,7 +40,7 @@ WinProcessList::WinProcessList()
 	ctx = nullptr;
 }
 
-WinProcessList::WinProcessList(WinCtx* pctx)
+WinProcessList::WinProcessList(const WinCtx* pctx)
 	: WinProcessList()
 {
 	ctx = pctx;

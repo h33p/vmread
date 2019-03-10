@@ -18,7 +18,7 @@ size_t ModuleIteratableList::getSize()
 	return size;
 }
 
-WriteList::WriteList(WinProcess* p)
+WriteList::WriteList(const WinProcess* p)
 {
 	ctx = p->ctx;
 	proc = &p->proc;
@@ -70,7 +70,7 @@ WinProcess::WinProcess()
 	modules.process = this;
 }
 
-WinProcess::WinProcess(WinProc& p, WinCtx* c) : WinProcess()
+WinProcess::WinProcess(const WinProc& p, const WinCtx* c) : WinProcess()
 {
 	proc = p;
 	ctx = c;
@@ -93,6 +93,16 @@ WinProcess::~WinProcess()
 		for (size_t i = 0; i < modules.size; i++)
 			free(modules.list[i].info.name);
 	delete[] modules.list;
+}
+
+ssize_t WinProcess::Read(uint64_t address, void* buffer, size_t sz)
+{
+	return VMemRead(&ctx->process, proc.dirBase, (uint64_t)buffer, address, sz);
+}
+
+ssize_t WinProcess::Write(uint64_t address, void* buffer, size_t sz)
+{
+	return VMemWrite(&ctx->process, proc.dirBase, (uint64_t)&buffer, address, sz);
 }
 
 void WinProcess::VerifyModuleList()
