@@ -1,6 +1,7 @@
 #include "mem.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #ifndef NO_ASSERTS
 #include <assert.h>
@@ -17,9 +18,19 @@ ssize_t VMemRead(const ProcessData* data, uint64_t dirBase, uint64_t local, uint
 		return MemRead(data, local, VTranslate(data, dirBase, remote), size);
 
 	int dataCount = (int)((size - 1) / 0x1000) + 2;
-	RWInfo rdata[dataCount];
+	RWInfo rdataStack[MAX_BATCHED_RW];
+	RWInfo* rdata = rdataStack;
+
+	if (dataCount > MAX_BATCHED_RW)
+		rdata = (RWInfo*)malloc(sizeof(RWInfo) * dataCount);
+
 	FillRWInfo(data, dirBase, rdata, &dataCount, local, remote, size);
-	return MemReadMul(data, rdata, dataCount);
+	ssize_t ret = MemReadMul(data, rdata, dataCount);
+
+	if (dataCount > MAX_BATCHED_RW)
+		free(rdata);
+
+	return ret;
 }
 
 ssize_t VMemWrite(const ProcessData* data, uint64_t dirBase, uint64_t local, uint64_t remote, size_t size)
@@ -28,9 +39,19 @@ ssize_t VMemWrite(const ProcessData* data, uint64_t dirBase, uint64_t local, uin
 		return MemWrite(data, local, VTranslate(data, dirBase, remote), size);
 
 	int dataCount = (int)((size - 1) / 0x1000) + 2;
-	RWInfo wdata[dataCount];
+	RWInfo wdataStack[MAX_BATCHED_RW];
+	RWInfo* wdata = wdataStack;
+
+	if (dataCount > MAX_BATCHED_RW)
+		wdata = (RWInfo*)malloc(sizeof(RWInfo) * dataCount);
+
 	FillRWInfo(data, dirBase, wdata, &dataCount, local, remote, size);
-	return MemWriteMul(data, wdata, dataCount);
+	ssize_t ret = MemWriteMul(data, wdata, dataCount);
+
+	if (dataCount > MAX_BATCHED_RW)
+		free(wdata);
+
+	return ret;
 }
 
 uint64_t VMemReadU64(const ProcessData* data, uint64_t dirBase, uint64_t remote)
@@ -64,17 +85,37 @@ uint64_t MemWriteU64(const ProcessData* data, uint64_t remote)
 ssize_t VMemReadMul(const ProcessData* data, uint64_t dirBase, RWInfo* info, size_t num)
 {
 	int dataCount = CalculateDataCount(info, num);
-	RWInfo readInfo[dataCount];
+	RWInfo readInfoStack[MAX_BATCHED_RW];
+	RWInfo* readInfo = readInfoStack;
+
+	if (num > MAX_BATCHED_RW)
+		readInfo = (RWInfo*)malloc(sizeof(RWInfo) * num);
+
 	dataCount = FillRWInfoMul(data, dirBase, info, readInfo, num);
-	return MemReadMul(data, readInfo, dataCount);
+	ssize_t ret = MemReadMul(data, readInfo, dataCount);
+
+	if (num > MAX_BATCHED_RW)
+		free(readInfo);
+
+	return ret;
 }
 
 ssize_t VMemWriteMul(const ProcessData* data, uint64_t dirBase, RWInfo* info, size_t num)
 {
 	int dataCount = CalculateDataCount(info, num);
-	RWInfo writeInfo[dataCount];
+	RWInfo writeInfoStack[MAX_BATCHED_RW];
+	RWInfo* writeInfo = writeInfoStack;
+
+	if (num > MAX_BATCHED_RW)
+			writeInfo = (RWInfo*)malloc(sizeof(RWInfo) * num);
+
 	dataCount = FillRWInfoMul(data, dirBase, info, writeInfo, num);
-	return MemWriteMul(data, writeInfo, dataCount);
+	ssize_t ret = MemWriteMul(data, writeInfo, dataCount);
+
+	if (num > MAX_BATCHED_RW)
+		free(writeInfo);
+
+	return ret;
 }
 
 /*

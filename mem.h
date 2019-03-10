@@ -9,6 +9,8 @@ extern "C" {
 
 #define PAGE_OFFSET_SIZE 12
 
+#define MAX_BATCHED_RW 1024
+
 typedef struct RWInfo
 {
 	uint64_t local;

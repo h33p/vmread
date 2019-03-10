@@ -128,25 +128,36 @@ int ParseExportTable(const WinCtx* ctx, const WinProc* process, uint64_t moduleB
 	if (exports->Size < sizeof(IMAGE_EXPORT_DIRECTORY) || exports->Size > 0x7fffff || exports->VirtualAddress == moduleBase)
 		return 1;
 
-	char buf[exports->Size + 1];
-	IMAGE_EXPORT_DIRECTORY* exportDir = (IMAGE_EXPORT_DIRECTORY*)buf;
-	if (VMemRead(&ctx->process, process->dirBase, (uint64_t)buf, moduleBase + exports->VirtualAddress, exports->Size) == -1)
+	char* buf = (char*)malloc(exports->Size + 1);
+
+	IMAGE_EXPORT_DIRECTORY* exportDir = (IMAGE_EXPORT_DIRECTORY*)(void*)buf;
+	if (VMemRead(&ctx->process, process->dirBase, (uint64_t)buf, moduleBase + exports->VirtualAddress, exports->Size) == -1) {
+		free(buf);
 		return 2;
+	}
 	buf[exports->Size] = 0;
-	if (!exportDir->NumberOfNames || !exportDir->AddressOfNames)
+	if (!exportDir->NumberOfNames || !exportDir->AddressOfNames) {
+		free(buf);
 		return 3;
+	}
 
 	uint32_t exportOffset = exports->VirtualAddress;
 
 	uint32_t* names = (uint32_t*)(void*)(buf + exportDir->AddressOfNames - exportOffset);
-	if (exportDir->AddressOfNames - exportOffset + exportDir->NumberOfNames * sizeof(uint32_t) > exports->Size)
+	if (exportDir->AddressOfNames - exportOffset + exportDir->NumberOfNames * sizeof(uint32_t) > exports->Size) {
+		free(buf);
 		return 4;
+	}
 	uint16_t* ordinals = (uint16_t*)(void*)(buf + exportDir->AddressOfNameOrdinals - exportOffset);
-	if (exportDir->AddressOfNameOrdinals - exportOffset + exportDir->NumberOfNames * sizeof(uint16_t) > exports->Size)
+	if (exportDir->AddressOfNameOrdinals - exportOffset + exportDir->NumberOfNames * sizeof(uint16_t) > exports->Size) {
+		free(buf);
 		return 5;
+	}
 	uint32_t* functions = (uint32_t*)(void*)(buf + exportDir->AddressOfFunctions - exportOffset);
-	if (exportDir->AddressOfFunctions - exportOffset + exportDir->NumberOfFunctions * sizeof(uint32_t) > exports->Size)
+	if (exportDir->AddressOfFunctions - exportOffset + exportDir->NumberOfFunctions * sizeof(uint32_t) > exports->Size) {
+		free(buf);
 		return 6;
+	}
 
 	outList->size = exportDir->NumberOfNames;
 	outList->list = (WinExport*)malloc(sizeof(WinExport) * outList->size);
@@ -162,6 +173,8 @@ int ParseExportTable(const WinCtx* ctx, const WinProc* process, uint64_t moduleB
 	}
 
 	outList->size = sz;
+
+	free(buf);
 
 	return 0;
 }
@@ -501,6 +514,9 @@ static void FillModuleList64(const WinCtx* ctx, const WinProc* process, WinModul
 	uint64_t end = head;
 	uint64_t prev = head+1;
 
+	size_t nameBufSize = 128;
+	wchar_t* buf = (wchar_t*)malloc(sizeof(wchar_t) * nameBufSize);
+
 	do {
 		if (list->size >= *maxSize) {
 			*maxSize *= 2;
@@ -518,7 +534,11 @@ static void FillModuleList64(const WinCtx* ctx, const WinProc* process, WinModul
 		if (!mod.BaseDllName.length || !mod.SizeOfImage)
 			continue;
 
-		wchar_t buf[mod.BaseDllName.length];
+		if (mod.BaseDllName.length >= nameBufSize) {
+			nameBufSize = mod.BaseDllName.length * 2;
+			buf = (wchar_t*)realloc(buf, sizeof(wchar_t) * nameBufSize);
+		}
+
 		VMemRead(&ctx->process, process->dirBase, (uint64_t)buf, mod.BaseDllName.buffer, mod.BaseDllName.length * sizeof(wchar_t));
 		char* buf2 = (char*)malloc(mod.BaseDllName.length);
 		for (int i = 0; i < mod.BaseDllName.length; i++)
@@ -540,6 +560,8 @@ static void FillModuleList64(const WinCtx* ctx, const WinProc* process, WinModul
 		if (!strcmp(buf2, "wow64.dll"))
 			*x86 = 1;
 	} while (head != end && head != prev);
+
+	free(buf);
 }
 
 static void FillModuleList32(const WinCtx* ctx, const WinProc* process, WinModuleList* list, size_t* maxSize)
@@ -551,6 +573,9 @@ static void FillModuleList32(const WinCtx* ctx, const WinProc* process, WinModul
 	uint32_t head = ldr.InMemoryOrderModuleList.f_link;
 	uint32_t end = head;
 	uint32_t prev = head+1;
+
+	size_t nameBufSize = 128;
+	wchar_t* buf = (wchar_t*)malloc(sizeof(wchar_t) * nameBufSize);
 
 	do {
 		if (list->size >= *maxSize) {
@@ -569,7 +594,11 @@ static void FillModuleList32(const WinCtx* ctx, const WinProc* process, WinModul
 		if (!mod.BaseDllName.length || !mod.SizeOfImage)
 			continue;
 
-		wchar_t buf[mod.BaseDllName.length];
+		if (mod.BaseDllName.length >= nameBufSize) {
+			nameBufSize = mod.BaseDllName.length * 2;
+			buf = (wchar_t*)realloc(buf, sizeof(wchar_t) * nameBufSize);
+		}
+
 		VMemRead(&ctx->process, process->dirBase, (uint64_t)buf, mod.BaseDllName.buffer, mod.BaseDllName.length * sizeof(wchar_t));
 		char* buf2 = (char*)malloc(mod.BaseDllName.length);
 		for (int i = 0; i < mod.BaseDllName.length; i++)
