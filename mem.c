@@ -190,11 +190,14 @@ static void FillRWInfo(const ProcessData* data, uint64_t dirBase, RWInfo* info, 
 	info[0].remote = VTranslate(data, dirBase, remote);
 	info[0].size = 0x1000 - (remote & 0xfff);
 
-	uint64_t curSize = info[0].size;
-
 #ifndef NO_ASSERTS
-	assert(!((remote + curSize) & 0xfff));
+	assert(!((remote + info[0].size) & 0xfff));
 #endif
+
+	if (info[0].size > len)
+		info[0].size = len;
+
+	uint64_t curSize = info[0].size;
 
 	uint64_t tlen = 0;
 
