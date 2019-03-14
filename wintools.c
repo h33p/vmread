@@ -367,8 +367,6 @@ static int CheckLow(const WinCtx* ctx, uint64_t* pml4, uint64_t* kernelEntry)
 	return 0;
 }
 
-int dprint = 0;
-
 static uint64_t FindNTKernel(const WinCtx* ctx, uint64_t kernelEntry)
 {
 	uint64_t i, o, p, u;
@@ -378,10 +376,6 @@ static uint64_t FindNTKernel(const WinCtx* ctx, uint64_t kernelEntry)
 		for (o = 0; o < 0x20; o++) {
 			VMemRead(&ctx->process, ctx->initialProcess.dirBase, (uint64_t)buf, i + 0x10000 * o, 0x10000);
 			for (p = 0; p < 0x10000; p += 0x1000) {
-				if(i + 0x10000 * o + p == 0xfffff80001000000) {
-					dprint = 1;
-					dprint = 0;
-				}
 				if (*(short*)(void*)(buf + p) == IMAGE_DOS_SIGNATURE) {
 					int kdbg = 0, poolCode = 0;
 					for (u = 0; u < 0x1000; u++) {

@@ -3,6 +3,8 @@
 
 /* Implementation for direct memory reads, used when injected into the QEMU process */
 
+extern uint64_t KFIXC;
+extern uint64_t KFIXO;
 uint64_t KFIXC = 0x80000000;
 uint64_t KFIXO = 0x80000000;
 #define KFIX2(x) ((x) < KFIXC ? (x) : ((x) - KFIXO))
