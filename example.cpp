@@ -11,7 +11,7 @@
 FILE* dfile;
 
 __attribute__((constructor))
-void init()
+static void init()
 {
 	FILE* out = stdout;
 	pid_t pid;
