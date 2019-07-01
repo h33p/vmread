@@ -3,12 +3,14 @@
 #include "pmparser.h"
 #include <errno.h>
 #include <string.h>
+#include <inttypes.h>
 
 char* strdup(const char*);
 
 static int CheckLow(const WinCtx* ctx, uint64_t* pml4, uint64_t* kernelEntry);
 static uint64_t FindNTKernel(const WinCtx* ctx, uint64_t kernelEntry);
 static uint16_t GetNTVersion(const WinCtx* ctx);
+static uint16_t SelectNTBuild(WinCtx* ctx, uint16_t availableVersions[], unsigned long len);
 static int SetupOffsets(WinCtx* ctx);
 static void FillModuleList64(const WinCtx* ctx, const WinProc* process, WinModuleList* list, size_t* maxSize, char* x86);
 static void FillModuleList32(const WinCtx* ctx, const WinProc* process, WinModuleList* list, size_t* maxSize);
@@ -92,6 +94,9 @@ int InitializeContext(WinCtx* ctx, pid_t pid)
 	if (SetupOffsets(ctx))
 		return 9;
 
+	if (ctx->ntBuild)
+		MSG(2, "NT Build:\t%hu\n", ctx->ntBuild);
+
 	return 0;
 }
 
@@ -129,7 +134,6 @@ int ParseExportTable(const WinCtx* ctx, const WinProc* process, uint64_t moduleB
 		return 1;
 
 	char* buf = (char*)malloc(exports->Size + 1);
-
 	IMAGE_EXPORT_DIRECTORY* exportDir = (IMAGE_EXPORT_DIRECTORY*)(void*)buf;
 	if (VMemRead(&ctx->process, process->dirBase, (uint64_t)buf, moduleBase + exports->VirtualAddress, exports->Size) == -1) {
 		free(buf);
@@ -421,8 +425,27 @@ static uint16_t GetNTVersion(const WinCtx* ctx)
 	return ((uint16_t)major) * 100 + minor;
 }
 
+static uint16_t SelectNTBuild(WinCtx* ctx, uint16_t availableVersions[], unsigned long len)
+{
+	char versionChoice[256];
+
+	MSG(2, "Multiple compatible builds detected.\n");
+	MSG(2, "Select the correct version (");
+	for (int i = len - 1; i >= 0; i--) {
+		i == 0 ? MSG(2, "%hu): ", availableVersions[i]) : MSG(2, "%hu,", availableVersions[i]);
+	}
+	fgets(versionChoice, sizeof(versionChoice), stdin);
+	ctx->ntBuild = (uint16_t)strtol(versionChoice, NULL, 10);
+
+	return ctx->ntBuild;
+}
+
 static int SetupOffsets(WinCtx* ctx)
 {
+	uint16_t availableVersionsWin10[] = {1809, 1903};
+	uint16_t availableVersionsWin7[] = {7600, 7601};
+	
+	uint16_t selectedVersion = 0;
 	switch (ctx->ntVersion) {
 	  case 502: /* XP SP2 */
 		  ctx->offsets = (WinOffsets){
@@ -449,7 +472,9 @@ static int SetupOffsets(WinCtx* ctx)
 			  .threadListEntry = 0x420, /* 0x428 on later SP1 */
 			  .teb = 0xb8
 		  };
+
 		  /* SP1 */
+		  selectedVersion = SelectNTBuild(ctx, availableVersionsWin7, sizeof(availableVersionsWin7) / sizeof(availableVersionsWin7[0])); /* oof */
 		  if (ctx->ntBuild == 7601)
 			  ctx->offsets.imageFileName = 0x2d8;
 		  break;
@@ -481,16 +506,23 @@ static int SetupOffsets(WinCtx* ctx)
 		  break;
 	  case 1000: /* W10 */
 		  ctx->offsets = (WinOffsets){
-			  .apl = 0x2e8,
-			  .session = 0x448,
-			  .imageFileName = 0x450,
-			  .dirBase = 0x28,
-			  .peb = 0x3f8,
-			  .peb32 = 0x30,
-			  .threadListHead = 0x488,
-			  .threadListEntry = 0x6a8,
-			  .teb = 0xf0
+			.apl = 0x2e8,
+			.session = 0x448,
+			.imageFileName = 0x450,
+			.dirBase = 0x28,
+			.peb = 0x3f8,
+			.peb32 = 0x30,
+			.threadListHead = 0x488,
+			.threadListEntry = 0x6a8,
+			.teb = 0xf0
 		  };
+
+		  /* May 2019 Update */
+	  	  selectedVersion = SelectNTBuild(ctx, availableVersionsWin10, sizeof(availableVersionsWin10) / sizeof(availableVersionsWin10[0])); /* oof */
+		  if (selectedVersion == 1903) {
+			  ctx->offsets.apl = 0x2f0;
+			  ctx->offsets.threadListEntry = 0x690;
+		  }
 		  break;
 	  default:
 		  return 1;
