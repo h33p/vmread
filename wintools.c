@@ -9,6 +9,7 @@ char* strdup(const char*);
 static int CheckLow(const WinCtx* ctx, uint64_t* pml4, uint64_t* kernelEntry);
 static uint64_t FindNTKernel(const WinCtx* ctx, uint64_t kernelEntry);
 static uint16_t GetNTVersion(const WinCtx* ctx);
+static uint32_t GetNTBuild(const WinCtx* ctx);
 static int SetupOffsets(WinCtx* ctx);
 static void FillModuleList64(const WinCtx* ctx, const WinProc* process, WinModuleList* list, size_t* maxSize, char* x86);
 static void FillModuleList32(const WinCtx* ctx, const WinProc* process, WinModuleList* list, size_t* maxSize);
@@ -88,6 +89,13 @@ int InitializeContext(WinCtx* ctx, pid_t pid)
 		return 8;
 
 	MSG(2, "NT Version:\t%hu\n", ctx->ntVersion);
+
+	ctx->ntBuild = GetNTBuild(ctx);
+
+	if (!ctx->ntBuild)
+		return 8;
+
+	MSG(2, "NT Build:\t%u\n", ctx->ntBuild);
 
 	if (SetupOffsets(ctx))
 		return 9;
@@ -421,6 +429,25 @@ static uint16_t GetNTVersion(const WinCtx* ctx)
 	return ((uint16_t)major) * 100 + minor;
 }
 
+static uint32_t GetNTBuild(const WinCtx* ctx)
+{
+	uint64_t getVersion = FindProcAddress(ctx->ntExports, "RtlGetVersion");
+
+	if (!getVersion)
+		return 0;
+
+	char buf[0x100];
+	VMemRead(&ctx->process, ctx->initialProcess.dirBase, (uint64_t)buf, getVersion, 0x100);
+
+	/* Find writes to rcx +12 -- that's where the version number is stored. These instructions are not on XP, but that is simply irrelevant. */
+	for (char* b = buf; b - buf < 0xf0; b++) {
+		if ((*(uint32_t*)(void*)b & 0x0c41c7) == 0x0c41c7)
+			return *(uint32_t*)(void*)(b + 3);
+	}
+
+	return 0;
+}
+
 static int SetupOffsets(WinCtx* ctx)
 {
 	switch (ctx->ntVersion) {
@@ -491,6 +518,12 @@ static int SetupOffsets(WinCtx* ctx)
 			  .threadListEntry = 0x6a8,
 			  .teb = 0xf0
 		  };
+
+		  if (ctx->ntBuild >= 18362) { /* Version 1903 or higher */
+			  ctx->offsets.apl = 0x2f0;
+			  ctx->offsets.threadListEntry = 0x690;
+		  }
+
 		  break;
 	  default:
 		  return 1;
@@ -611,4 +644,6 @@ static void FillModuleList32(const WinCtx* ctx, const WinProc* process, WinModul
 		list->list[list->size].loadCount = mod.LoadCount;
 		list->size++;
 	} while (head != end && head != prev);
+
+	free(buf);
 }

@@ -1,4 +1,4 @@
-project('vctk', 'cpp', 'c', default_options : ['c_std=c99', 'c++_std=c++11'])
+project('vmread', 'cpp', 'c', default_options : ['c_std=c99', 'c++_std=c++11'])
 
 compile_args = ['-pedantic', '-Werror', '-DMVERBOSE=4', '-fsanitize=address', '-DREAD_CHECK']
 link_args = ['-lasan']

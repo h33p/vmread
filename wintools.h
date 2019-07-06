@@ -73,7 +73,7 @@ typedef struct WinCtx
 	WinOffsets offsets;
 	uint64_t ntKernel;
 	uint16_t ntVersion;
-	uint16_t ntBuild;
+	uint32_t ntBuild;
 	WinExportList ntExports;
 	WinProc initialProcess;
 } WinCtx;
