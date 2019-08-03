@@ -2,9 +2,19 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #ifndef NO_ASSERTS
 #include <assert.h>
+#endif
+
+/* For how long should the cached page be valid */
+#ifndef VT_CACHE_TIME_MS
+#define VT_CACHE_TIME_MS 1
+#endif
+
+#ifndef VT_CACHE_TIME_NS
+#define VT_CACHE_TIME_NS VT_CACHE_TIME_MS * 1000000
 #endif
 
 static const uint64_t PMASK = (~0xfull << 8) & 0xfffffffffull;
@@ -119,6 +129,38 @@ ssize_t VMemWriteMul(const ProcessData* data, uint64_t dirBase, RWInfo* info, si
 }
 
 /*
+  This is used to cache the pages touched last bu reads of VTranslate, this increases the performance of external mode by at least 2x for multiple consequitive reads in common area. Cached page expires after a set interval which should be small enough not to cause very serious harm
+*/
+
+#if (LMODE() == MODE_EXTERNAL())
+static __thread uint64_t vtCachePage[4] = { 0, 0, 0, 0 };
+static __thread char vtCache[4][0x1000];
+static __thread struct timespec vtCacheTime[4];
+#endif
+
+static uint64_t VtMemReadU64(const ProcessData* data, size_t idx, uint64_t address)
+{
+#if (LMODE() == MODE_EXTERNAL())
+	uint64_t page = address & ~0xfff;
+
+	struct timespec t;
+	clock_gettime(CLOCK_REALTIME, &t);
+
+	uint64_t timeDiff = (t.tv_sec - vtCacheTime[idx].tv_sec) * (uint64_t)1e9 + (t.tv_nsec - vtCacheTime[idx].tv_nsec);
+
+	if (vtCachePage[idx] != page || timeDiff >= VT_CACHE_TIME_NS) {
+		MemRead(data, (uint64_t)vtCache[idx], page, 0x1000);
+		vtCachePage[idx] = page;
+		vtCacheTime[idx] = t;
+	}
+
+	return *(uint64_t*)(vtCache[idx] + (address & 0xfff));
+#else
+	return MemReadU64(data, address);
+#endif
+}
+
+/*
   Translates a virtual address to a physical one. This (most likely) is windows specific and might need extra work to work on Linux target.
 */
 
@@ -132,11 +174,11 @@ uint64_t VTranslate(const ProcessData* data, uint64_t dirBase, uint64_t address)
 	uint64_t pd = ((address >> 30) & (0x1ffll));
 	uint64_t pdp = ((address >> 39) & (0x1ffll));
 
-	uint64_t pdpe = MemReadU64(data, dirBase + 8 * pdp);
+	uint64_t pdpe = VtMemReadU64(data, 0, dirBase + 8 * pdp);
 	if (~pdpe & 1)
 		return 0;
 
-	uint64_t pde = MemReadU64(data, (pdpe & PMASK) + 8 * pd);
+	uint64_t pde = VtMemReadU64(data, 1, (pdpe & PMASK) + 8 * pd);
 	if (~pde & 1)
 		return 0;
 
@@ -144,7 +186,7 @@ uint64_t VTranslate(const ProcessData* data, uint64_t dirBase, uint64_t address)
 	if (pde & 0x80)
 		return (pde & (~0ull << 42 >> 12)) + (address & ~(~0ull << 30));
 
-	uint64_t pteAddr = MemReadU64(data, (pde & PMASK) + 8 * pt);
+	uint64_t pteAddr = VtMemReadU64(data, 2, (pde & PMASK) + 8 * pt);
 	if (~pteAddr & 1)
 		return 0;
 
@@ -152,7 +194,7 @@ uint64_t VTranslate(const ProcessData* data, uint64_t dirBase, uint64_t address)
 	if (pteAddr & 0x80)
 		return (pteAddr & PMASK) + (address & ~(~0ull << 21));
 
-	address = MemReadU64(data, (pteAddr & PMASK) + 8 * pte) & PMASK;
+	address = VtMemReadU64(data, 3, (pteAddr & PMASK) + 8 * pte) & PMASK;
 
 	if (!address)
 		return 0;

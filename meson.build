@@ -1,9 +1,9 @@
 project('vmread', 'cpp', 'c', default_options : ['c_std=c99', 'c++_std=c++11'])
 
-compile_args = ['-pedantic', '-Werror', '-DMVERBOSE=4', '-DREAD_CHECK']
-compile_args_external = ['-DLMODE=MODE_EXTERNAL', '-fsanitize=address']
+compile_args = ['-D_POSIX_C_SOURCE=200809L', '-pedantic', '-DMVERBOSE=4', '-DMTR_ENABLED', '-DREAD_CHECK']
+compile_args_external = ['-DLMODE=MODE_EXTERNAL']#, '-fsanitize=address']
 compile_args_internal = ['-DLMODE=MODE_QEMU_INJECT', '-DMVERBOSE=4']
-link_args_external = ['-lasan']
+link_args_external = []#'-lasan']
 link_args_internal = []
 link_args = []
 cpp_compile_args = []
@@ -53,8 +53,8 @@ example = executable(
 example_lib = shared_library(
 	'example',
 	files(base_files + ['example.cpp', 'intmem.c'] + hlapi_files),
-  c_args : compile_args_internal,
-  cpp_args : compile_args_internal,
+  c_args : compile_args + compile_args_internal,
+  cpp_args : compile_args + compile_args_internal,
   link_args : compile_args + compile_args_internal + link_args + link_args_internal,
   dependencies: [dl]
 )

@@ -63,7 +63,7 @@ void runfullbench(FILE* out, const WinProcess& process, size_t start, size_t end
 		unsigned long time = readbench(process, start, end, i, 0x100000 * readSize, &readCount);
 		double speed = ((double)readSize * 10e5) / time;
 		double callSpeed = ((double)readCount * 10e5) / time;
-		fprintf(out, "Reads of size %lx: %.2lf Mb/s; %ld calls; %.2lf Calls/s\n", i, speed, readCount, callSpeed);
+		fprintf(out, "Reads of size 0x%lx: %.2lf Mb/s; %ld calls; %.2lf Calls/s\n", i, speed, readCount, callSpeed);
 	}
 }
 
@@ -116,6 +116,8 @@ static void init()
 	} catch (VMException& e) {
 		fprintf(out, "Initialization error: %d\n", e.value);
 	}
+
+
 	fclose(out);
 }
 

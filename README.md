@@ -7,33 +7,33 @@ Minimum language standard: C99
 The current example project is in C++, requiring at least C++11 with template support, but the C version also exists, which works fine on a C99 compiler.
 
 ##### Performance
-Internal (QEMU inject) mode is roughly 32 times faster than external mode. However, when performing reads that are larger than one page in size, the memcpy quickly reaches its peak speed and external mode begins to catch up. Performance numbers are shown below.
+Internal (QEMU inject) mode is roughly 24 times faster than external mode. However, when performing larger reads, the memcpy quickly reaches its peak speed and external mode begins to catch up. Performance numbers are shown below.
 
 External:
 ```
-Reads of size 0x10000: 609.38 Mb/s; 16 calls; 9750.15 Calls/s
-Reads of size 0x1000: 297.62 Mb/s; 256 calls; 76190.48 Calls/s
-Reads of size 0x100: 30.51 Mb/s; 4096 calls; 124984.74 Calls/s
-Reads of size 0x10: 2.19 Mb/s; 65536 calls; 143368.74 Calls/s
-Reads of size 0x8: 1.14 Mb/s; 131072 calls; 149837.67 Calls/s
+Reads of size 0x10000: 3154.57 Mb/s; 16 calls; 50473.19 Calls/s
+Reads of size 0x1000: 1007.05 Mb/s; 256 calls; 257804.63 Calls/s
+Reads of size 0x100: 102.31 Mb/s; 4096 calls; 419071.00 Calls/s
+Reads of size 0x10: 6.32 Mb/s; 65536 calls; 414079.83 Calls/s
+Reads of size 0x8: 3.21 Mb/s; 131072 calls; 420928.23 Calls/s
 ```
 
 Internal:
 ```
-Reads of size 0x10000: 4587.16 Mb/s; 16 calls; 73394.50 Calls/s
-Reads of size 0x1000: 4464.29 Mb/s; 256 calls; 1142857.14 Calls/s
-Reads of size 0x100: 956.02 Mb/s; 4096 calls; 3915869.98 Calls/s
-Reads of size 0x10: 66.76 Mb/s; 65536 calls; 4375191.94 Calls/s
-Reads of size 0x8: 36.94 Mb/s; 131072 calls; 4842323.04 Calls/s
+Reads of size 0x10000: 7042.25 Mb/s; 16 calls; 112676.06 Calls/s
+Reads of size 0x1000: 7042.25 Mb/s; 256 calls; 1802816.90 Calls/s
+Reads of size 0x100: 1663.89 Mb/s; 4096 calls; 6815307.82 Calls/s
+Reads of size 0x10: 150.31 Mb/s; 65536 calls; 9850593.72 Calls/s
+Reads of size 0x8: 78.96 Mb/s; 131072 calls; 10349968.41 Calls/s
 ```
 
 Performance difference:
 ```
-0x10000: ~7.52 times
-0x1000: ~15 times
-0x100: ~31.33 times
-0x10: ~30.48 times
-0x8 ~32.69 times
+0x10000: ~2.23 times
+0x1000: ~7 times
+0x100: ~16.26 times
+0x10: ~23.78 times
+0x8 ~24.36 times
 ```
 
 ##### Frequent issues
