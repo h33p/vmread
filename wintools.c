@@ -533,7 +533,7 @@ static int SetupOffsets(WinCtx* ctx)
 
 		  if (ctx->ntBuild >= 18362) { /* Version 1903 or higher */
 			  ctx->offsets.apl = 0x2f0;
-			  ctx->offsets.threadListEntry = 0x690;
+			  ctx->offsets.threadListEntry = 0x6b8;
 		  }
 
 		  break;
