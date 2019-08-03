@@ -1,7 +1,11 @@
 project('vmread', 'cpp', 'c', default_options : ['c_std=c99', 'c++_std=c++11'])
 
-compile_args = ['-pedantic', '-Werror', '-DMVERBOSE=4', '-fsanitize=address', '-DREAD_CHECK']
-link_args = ['-lasan']
+compile_args = ['-pedantic', '-Werror', '-DMVERBOSE=4', '-DREAD_CHECK']
+compile_args_external = ['-DLMODE=MODE_EXTERNAL', '-fsanitize=address']
+compile_args_internal = ['-DLMODE=MODE_QEMU_INJECT', '-DMVERBOSE=4']
+link_args_external = ['-lasan']
+link_args_internal = []
+link_args = []
 cpp_compile_args = []
 c_compile_args = []
 
@@ -41,16 +45,16 @@ hlapi_files = ['hlapi/windll.cpp', 'hlapi/winprocess.cpp', 'hlapi/winprocesslist
 example = executable(
 	'example',
 	files(base_files + ['example.cpp', 'vmmem.c'] + hlapi_files),
-  c_args : c_compile_args + compile_args + ['-DLMODE=MODE_EXTERNAL'],
-  cpp_args : cpp_compile_args + compile_args + ['-DLMODE=MODE_EXTERNAL'],
-  link_args : compile_args + link_args
+  c_args : c_compile_args + compile_args + compile_args_external,
+  cpp_args : cpp_compile_args + compile_args + compile_args_external,
+  link_args : compile_args + compile_args_external + link_args + link_args_external
 )
 
 example_lib = shared_library(
 	'example',
 	files(base_files + ['example.cpp', 'intmem.c'] + hlapi_files),
-  c_args : ['-DLMODE=MODE_QEMU_INJECT', '-DMVERBOSE=4'],
-  cpp_args : ['-DLMODE=MODE_QEMU_INJECT', '-DMVERBOSE=4'],
-  link_args : compile_args + link_args,
+  c_args : compile_args_internal,
+  cpp_args : compile_args_internal,
+  link_args : compile_args + compile_args_internal + link_args + link_args_internal,
   dependencies: [dl]
 )

@@ -4,11 +4,68 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <string.h>
+#include <random>
+#include <chrono>
 
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 
 FILE* dfile;
+
+unsigned long readbench(const WinProcess& process, size_t start, size_t end, size_t chunkSize, size_t totalSize, size_t *readCount)
+{
+	end -= chunkSize;
+	if (end <= start) {
+		chunkSize = (end + chunkSize) - start;
+		end = start + 1;
+	}
+
+	void* buf = malloc(chunkSize);
+
+	size_t read = 0;
+	*readCount = 0;
+
+	std::random_device rd;
+	std::mt19937 eng(rd());
+	std::uniform_int_distribution<size_t> distr(start, end);
+
+	auto beginTime = std::chrono::high_resolution_clock::now();
+
+	while(read < totalSize) {
+		size_t addr = distr(eng);
+		VMemRead(&process.ctx->process, process.proc.dirBase, (uint64_t)buf, addr, chunkSize);
+		read += chunkSize;
+		(*readCount)++;
+	}
+
+	auto endTime = std::chrono::high_resolution_clock::now();
+
+	free(buf);
+
+	return std::chrono::duration_cast<std::chrono::microseconds>(endTime - beginTime).count();
+}
+
+static const size_t chunkSizes[] =
+{
+	0x10000,
+	0x1000,
+	0x100,
+	0x10,
+	0x8
+};
+
+static const size_t readSize = 1;
+
+void runfullbench(FILE* out, const WinProcess& process, size_t start, size_t end)
+{
+	size_t readCount;
+	for (const size_t i : chunkSizes) {
+		unsigned long time = readbench(process, start, end, i, 0x100000 * readSize, &readCount);
+		double speed = ((double)readSize * 10e5) / time;
+		double callSpeed = ((double)readCount * 10e5) / time;
+		fprintf(out, "Reads of size %lx: %.2lf Mb/s; %ld calls; %.2lf Calls/s\n", i, speed, readCount, callSpeed);
+	}
+}
 
 __attribute__((constructor))
 static void init()
@@ -46,9 +103,12 @@ static void init()
 				fprintf(out, "\tExports:\n");
 				for (auto& o : i.modules) {
 					fprintf(out, "\t%.8lx\t%.8lx\t%lx\t%s\n", o.info.baseAddress, o.info.entryPoint, o.info.sizeOfModule, o.info.name);
-					if (!strcmp("Steam.exe", o.info.name))
+					if (!strcmp("Steam.exe", o.info.name)) {
 						for (auto& u : o.exports)
 							fprintf(out, "\t\t%lx\t%s\n", u.address, u.name);
+						fprintf(out, "Performing memory benchmark...\n");
+						runfullbench(out, i, o.info.baseAddress, o.info.baseAddress + o.info.sizeOfModule);
+					}
 				}
 			}
 		}
