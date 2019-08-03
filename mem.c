@@ -9,12 +9,14 @@
 #endif
 
 /* For how long should the cached page be valid */
+#if (LMODE() == MODE_EXTERNAL())
 #ifndef VT_CACHE_TIME_MS
 #define VT_CACHE_TIME_MS 1
 #endif
 
 #ifndef VT_CACHE_TIME_NS
 #define VT_CACHE_TIME_NS VT_CACHE_TIME_MS * 1000000
+#endif
 #endif
 
 static const uint64_t PMASK = (~0xfull << 8) & 0xfffffffffull;
@@ -154,8 +156,9 @@ static uint64_t VtMemReadU64(const ProcessData* data, size_t idx, uint64_t addre
 		vtCacheTime[idx] = t;
 	}
 
-	return *(uint64_t*)(vtCache[idx] + (address & 0xfff));
+	return *(uint64_t*)(void*)(vtCache[idx] + (address & 0xfff));
 #else
+	(void)idx;
 	return MemReadU64(data, address);
 #endif
 }

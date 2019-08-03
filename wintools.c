@@ -547,6 +547,7 @@ static void FillModuleList64(const WinCtx* ctx, const WinProc* process, WinModul
 {
 	PEB peb = GetPeb(ctx, process);
 	PEB_LDR_DATA ldr;
+	memset(&ldr, 0, sizeof(ldr));
 	VMemRead(&ctx->process, process->dirBase, (uint64_t)&ldr, peb.Ldr, sizeof(ldr));
 
 	uint64_t head = ldr.InMemoryOrderModuleList.f_link;
@@ -567,6 +568,7 @@ static void FillModuleList64(const WinCtx* ctx, const WinProc* process, WinModul
 		prev = head;
 
 		LDR_MODULE mod;
+		memset(&mod, 0, sizeof(mod));
 		VMemRead(&ctx->process, process->dirBase, (uint64_t)&mod, head - sizeof(LIST_ENTRY), sizeof(mod));
 		VMemRead(&ctx->process, process->dirBase, (uint64_t)&head, head, sizeof(head));
 
@@ -583,6 +585,8 @@ static void FillModuleList64(const WinCtx* ctx, const WinProc* process, WinModul
 		for (int i = 0; i < mod.BaseDllName.length; i++)
 			buf2[i] = ((char*)buf)[i*2];
 		buf2[mod.BaseDllName.length-1] = '\0';
+
+		MSG(2, "Mod: %s\n", buf2);
 
 		if (*(short*)(void*)buf2 == 0x53) { /* 'S\0', a bit of magic, but it works */
 			free(buf2);
@@ -607,6 +611,7 @@ static void FillModuleList32(const WinCtx* ctx, const WinProc* process, WinModul
 {
 	PEB32 peb = GetPeb32(ctx, process);
 	PEB_LDR_DATA32 ldr;
+	memset(&ldr, 0, sizeof(ldr));
 	VMemRead(&ctx->process, process->dirBase, (uint64_t)&ldr, peb.Ldr, sizeof(ldr));
 
 	uint32_t head = ldr.InMemoryOrderModuleList.f_link;
@@ -627,6 +632,8 @@ static void FillModuleList32(const WinCtx* ctx, const WinProc* process, WinModul
 		prev = head;
 
 		LDR_MODULE32 mod;
+		memset(&mod, 0, sizeof(mod));
+
 		VMemRead(&ctx->process, process->dirBase, (uint64_t)&mod, head - sizeof(LIST_ENTRY32), sizeof(mod));
 		VMemRead(&ctx->process, process->dirBase, (uint64_t)&head, head, sizeof(head));
 

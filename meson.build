@@ -1,9 +1,9 @@
 project('vmread', 'cpp', 'c', default_options : ['c_std=c99', 'c++_std=c++11'])
 
 compile_args = ['-D_POSIX_C_SOURCE=200809L', '-pedantic', '-DMVERBOSE=4', '-DMTR_ENABLED', '-DREAD_CHECK']
-compile_args_external = ['-DLMODE=MODE_EXTERNAL']#, '-fsanitize=address']
+compile_args_external = ['-DLMODE=MODE_EXTERNAL', '-fsanitize=address']
 compile_args_internal = ['-DLMODE=MODE_QEMU_INJECT', '-DMVERBOSE=4']
-link_args_external = []#'-lasan']
+link_args_external = ['-lasan']
 link_args_internal = []
 link_args = []
 cpp_compile_args = []
