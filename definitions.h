@@ -5,13 +5,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <stdio.h>
-
-typedef struct ProcessData
-{
-	uint64_t mapsStart;
-	uint64_t mapsSize;
-	pid_t pid;
-} ProcessData;
+#include "processdata.h"
 
 extern FILE* dfile;
 

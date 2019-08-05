@@ -8,8 +8,12 @@
 #include <assert.h>
 #endif
 
+#if (LMODE() == MODE_EXTERNAL() && !defined(KMOD_MEMMAP))
+#define USE_PAGECACHE
+#endif
+
 /* For how long should the cached page be valid */
-#if (LMODE() == MODE_EXTERNAL())
+#ifdef USE_PAGECACHE
 #ifndef VT_CACHE_TIME_MS
 #define VT_CACHE_TIME_MS 1
 #endif
@@ -134,7 +138,7 @@ ssize_t VMemWriteMul(const ProcessData* data, uint64_t dirBase, RWInfo* info, si
   This is used to cache the pages touched last bu reads of VTranslate, this increases the performance of external mode by at least 2x for multiple consequitive reads in common area. Cached page expires after a set interval which should be small enough not to cause very serious harm
 */
 
-#if (LMODE() == MODE_EXTERNAL())
+#ifdef USE_PAGECACHE
 static __thread uint64_t vtCachePage[4] = { 0, 0, 0, 0 };
 static __thread char vtCache[4][0x1000];
 static __thread struct timespec vtCacheTime[4];
@@ -142,7 +146,7 @@ static __thread struct timespec vtCacheTime[4];
 
 static uint64_t VtMemReadU64(const ProcessData* data, size_t idx, uint64_t address)
 {
-#if (LMODE() == MODE_EXTERNAL())
+#ifdef USE_PAGECACHE
 	uint64_t page = address & ~0xfff;
 
 	struct timespec t;

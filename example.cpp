@@ -12,7 +12,7 @@
 
 FILE* dfile;
 
-unsigned long readbench(const WinProcess& process, size_t start, size_t end, size_t chunkSize, size_t totalSize, size_t *readCount)
+static unsigned long readbench(const WinProcess& process, size_t start, size_t end, size_t chunkSize, size_t totalSize, size_t *readCount)
 {
 	end -= chunkSize;
 	if (end <= start) {
@@ -56,7 +56,7 @@ static const size_t chunkSizes[] =
 
 static const size_t readSize = 1;
 
-void runfullbench(FILE* out, const WinProcess& process, size_t start, size_t end)
+static void runfullbench(FILE* out, const WinProcess& process, size_t start, size_t end)
 {
 	size_t readCount;
 	for (const size_t i : chunkSizes) {
@@ -103,7 +103,7 @@ static void init()
 				fprintf(out, "\tExports:\n");
 				for (auto& o : i.modules) {
 					fprintf(out, "\t%.8lx\t%.8lx\t%lx\t%s\n", o.info.baseAddress, o.info.entryPoint, o.info.sizeOfModule, o.info.name);
-					if (!strcmp("Steam.exe", o.info.name)) {
+					if (!strcmp("friendsui.DLL", o.info.name)) {
 						for (auto& u : o.exports)
 							fprintf(out, "\t\t%lx\t%s\n", u.address, u.name);
 						fprintf(out, "Performing memory benchmark...\n");

@@ -4,6 +4,12 @@
 #include <errno.h>
 #include <string.h>
 
+#ifdef KMOD_MEMMAP
+#include "kmem.h"
+#include <sys/mman.h>
+#include <sys/ioctl.h>
+#endif
+
 char* strdup(const char*);
 
 static int CheckLow(const WinCtx* ctx, uint64_t* pml4, uint64_t* kernelEntry);
@@ -47,6 +53,19 @@ int InitializeContext(WinCtx* ctx, pid_t pid)
 	ctx->process.mapsSize = largestMaps->length;
 
 	pmparser_free(maps);
+
+#ifdef KMOD_MEMMAP
+	MSG(2, "Mapping VM memory, this will take a second...\n");
+
+	int fd = open("/proc/vmread", O_RDWR);
+
+	if (fd != -1) {
+		ioctl(fd, VMREAD_IOCTL_MAPVMMEM, &ctx->process);
+		close(fd);
+	}
+#endif
+
+	MSG(2, "Mem:\t%lx\t| Size:\t%lx\n", ctx->process.mapsStart, ctx->process.mapsSize);
 
 	if (!CheckLow(ctx, &pml4, &kernelEntry))
 		return 3;
@@ -297,8 +316,6 @@ WinProcList GenerateProcessList(const WinCtx* ctx)
 		if (!curProc)
 			break;
 	}
-
-	list.size--;
 
 	return list;
 }
