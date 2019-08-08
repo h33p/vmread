@@ -88,9 +88,9 @@ static void init()
 		WinContext ctx(pid);
 		ctx.processList.Refresh();
 
-		fprintf(out, "Process List:\n");
+		fprintf(out, "Process List:\nPID\tVIRT\t\t\tPHYS\t\tBASE\t\tNAME\n");
 		for (auto& i : ctx.processList)
-			fprintf(out, "%.4lx\t%s\n", i.proc.pid, i.proc.name);
+			fprintf(out, "%.4lx\t%.16lx\t%.9lx\t%.9lx\t%s\n", i.proc.pid, i.proc.process, i.proc.physProcess, i.proc.dirBase, i.proc.name);
 
 		for (auto& i : ctx.processList) {
 			if (!strcasecmp("steam.exe", i.proc.name)) {
@@ -112,6 +112,25 @@ static void init()
 				}
 			}
 		}
+	
+		WinModuleList sysModules = GenerateKernelModuleList(&ctx.ctx);
+
+		for (size_t i = 0; i < sysModules.size; i++) {
+			if (!strcasecmp(sysModules.list[i].name, "hidparse.sys")) {
+				WinExportList drvExports;
+				memset(&drvExports, 0, sizeof(drvExports));
+				GenerateExportList(&ctx.ctx, &ctx.ctx.initialProcess, sysModules.list[i].baseAddress, &drvExports);
+
+				fprintf(out, "%s kmod exports:\n", sysModules.list[i].name);
+
+				for (size_t o = 0; o < drvExports.size; o++)
+					fprintf(out, "%-40s\t%lx\n", drvExports.list[o].name, drvExports.list[o].address);
+
+				FreeExportList(drvExports);
+			}
+		}
+
+		FreeModuleList(sysModules);
 
 	} catch (VMException& e) {
 		fprintf(out, "Initialization error: %d\n", e.value);

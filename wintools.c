@@ -17,6 +17,7 @@ static uint64_t FindNTKernel(const WinCtx* ctx, uint64_t kernelEntry);
 static uint16_t GetNTVersion(const WinCtx* ctx);
 static uint32_t GetNTBuild(const WinCtx* ctx);
 static int SetupOffsets(WinCtx* ctx);
+static void FillAnyModuleList64(const WinCtx* ctx, const WinProc* process, WinModuleList* list, size_t* maxSize, uint64_t head, int inMemoryOrder);
 static void FillModuleList64(const WinCtx* ctx, const WinProc* process, WinModuleList* list, size_t* maxSize, char* x86);
 static void FillModuleList32(const WinCtx* ctx, const WinProc* process, WinModuleList* list, size_t* maxSize);
 
@@ -337,6 +338,20 @@ WinModuleList GenerateModuleList(const WinCtx* ctx, const WinProc* process)
 	return list;
 }
 
+WinModuleList GenerateKernelModuleList(const WinCtx* ctx)
+{
+	WinModuleList list;
+	list.size = 0;
+	list.list = (WinModule*)malloc(sizeof(WinModule) * 25);
+
+	size_t maxSize = 25;
+	uint64_t psLoadedModuleList = FindProcAddress(ctx->ntExports, "PsLoadedModuleList");
+
+	FillAnyModuleList64(ctx, &ctx->initialProcess, &list, &maxSize, psLoadedModuleList, 0);
+
+	return list;
+}
+
 void FreeModuleList(WinModuleList list)
 {
 	if (!list.list)
@@ -568,11 +583,28 @@ static void FillModuleList64(const WinCtx* ctx, const WinProc* process, WinModul
 	VMemRead(&ctx->process, process->dirBase, (uint64_t)&ldr, peb.Ldr, sizeof(ldr));
 
 	uint64_t head = ldr.InMemoryOrderModuleList.f_link;
+	size_t i = list->size ? list->size - 1 : list->size;
+
+	FillAnyModuleList64(ctx, process, list, maxSize, head, 1);
+
+	for (; i < list->size; i++) {
+		if (!strcmp(list->list[i].name, "wow64.dll")) {
+			*x86 = 1;
+			break;
+		}
+	}
+}
+
+static void FillAnyModuleList64(const WinCtx* ctx, const WinProc* process, WinModuleList* list, size_t* maxSize, uint64_t head, int inMemoryOrder)
+{
 	uint64_t end = head;
 	uint64_t prev = head+1;
 
 	size_t nameBufSize = 128;
 	wchar_t* buf = (wchar_t*)malloc(sizeof(wchar_t) * nameBufSize);
+
+	if (inMemoryOrder)
+		inMemoryOrder = 1;
 
 	do {
 		if (list->size >= *maxSize) {
@@ -586,7 +618,7 @@ static void FillModuleList64(const WinCtx* ctx, const WinProc* process, WinModul
 
 		LDR_MODULE mod;
 		memset(&mod, 0, sizeof(mod));
-		VMemRead(&ctx->process, process->dirBase, (uint64_t)&mod, head - sizeof(LIST_ENTRY), sizeof(mod));
+		VMemRead(&ctx->process, process->dirBase, (uint64_t)&mod, head - sizeof(LIST_ENTRY) * inMemoryOrder, sizeof(mod));
 		VMemRead(&ctx->process, process->dirBase, (uint64_t)&head, head, sizeof(head));
 
 		if (!mod.BaseDllName.length || !mod.SizeOfImage)
@@ -603,8 +635,6 @@ static void FillModuleList64(const WinCtx* ctx, const WinProc* process, WinModul
 			buf2[i] = ((char*)buf)[i*2];
 		buf2[mod.BaseDllName.length-1] = '\0';
 
-		MSG(2, "Mod: %s\n", buf2);
-
 		if (*(short*)(void*)buf2 == 0x53) { /* 'S\0', a bit of magic, but it works */
 			free(buf2);
 			continue;
@@ -617,8 +647,6 @@ static void FillModuleList64(const WinCtx* ctx, const WinProc* process, WinModul
 		list->list[list->size].loadCount = mod.LoadCount;
 		list->size++;
 
-		if (!strcmp(buf2, "wow64.dll"))
-			*x86 = 1;
 	} while (head != end && head != prev);
 
 	free(buf);

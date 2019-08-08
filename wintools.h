@@ -88,6 +88,7 @@ uint64_t GetProcAddress(const WinCtx* ctx, const WinProc* process, uint64_t modu
 uint64_t FindProcAddress(const WinExportList exports, const char* procName);
 WinProcList GenerateProcessList(const WinCtx* ctx);
 WinModuleList GenerateModuleList(const WinCtx* ctx, const WinProc* process);
+WinModuleList GenerateKernelModuleList(const WinCtx* ctx);
 void FreeModuleList(WinModuleList list);
 const WinModule* GetModuleInfo(const WinModuleList list, const char* moduleName);
 PEB GetPeb(const WinCtx* ctx, const WinProc* process);
