@@ -1,21 +1,76 @@
 #include "hlapi.h"
 
+#include <stdio.h>
+
+ModuleIteratableList::ModuleIteratableList(bool k)
+	: process(nullptr), kernel(k), list(nullptr), size(0)
+{
+}
+
+ModuleIteratableList::ModuleIteratableList(WinProcess* p, bool k)
+	: ModuleIteratableList(k)
+{
+	process = p;
+}
+
+ModuleIteratableList::ModuleIteratableList(ModuleIteratableList&& rhs)
+	: process(rhs.process), kernel(rhs.kernel), list(rhs.list), size(rhs.size)
+{
+	if (process->modules.process != process)
+		*(volatile bool*)nullptr = 0;
+}
+
+ModuleIteratableList::~ModuleIteratableList()
+{
+	InvalidateList();
+}
+
 ModuleIteratableList::iterator ModuleIteratableList::begin()
 {
-	process->VerifyModuleList();
+	Verify();
 	return iterator(this);
 }
 
 ModuleIteratableList::iterator ModuleIteratableList::end()
 {
-	process->VerifyModuleList();
+	Verify();
 	return iterator(this, size);
 }
 
 size_t ModuleIteratableList::getSize()
 {
-	process->VerifyModuleList();
+	Verify();
 	return size;
+}
+
+void ModuleIteratableList::Verify()
+{
+	if (!list) {
+		WinModuleList ls = !kernel ? GenerateModuleList(process->ctx, &process->proc) : GenerateKernelModuleList(process->ctx);
+		list = new WinDll[ls.size];
+		size = ls.size;
+		for (size_t i = 0; i < size; i++)
+			list[i] = WinDll(process, ls.list[i]);
+		free(ls.list);
+	}
+}
+
+void ModuleIteratableList::InvalidateList()
+{
+	if (list)
+		for (size_t i = 0; i < size; i++)
+			free(list[i].info.name);
+	delete[] list;
+	list = nullptr;
+}
+
+WinDll* ModuleIteratableList::GetModuleInfo(const char* moduleName)
+{
+	Verify();
+	for (size_t i = 0; i < size; i++)
+		if (!strcmp(moduleName, list[i].info.name))
+			return list + i;
+	return nullptr;
 }
 
 WriteList::WriteList(const WinProcess* p)
@@ -50,11 +105,7 @@ void WriteList::Commit()
 
 WinDll* WinProcess::GetModuleInfo(const char* moduleName)
 {
-	VerifyModuleList();
-	for (size_t i = 0; i < modules.size; i++)
-		if (!strcmp(moduleName, modules.list[i].info.name))
-			return modules.list + i;
-	return nullptr;
+	return modules.GetModuleInfo(moduleName);
 }
 
 PEB WinProcess::GetPeb()
@@ -63,36 +114,34 @@ PEB WinProcess::GetPeb()
 }
 
 WinProcess::WinProcess()
+	: ctx(nullptr), modules(this)
 {
-	ctx = nullptr;
-	modules.list = nullptr;
-	modules.size = 0;
-	modules.process = this;
 }
 
-WinProcess::WinProcess(const WinProc& p, const WinCtx* c) : WinProcess()
+WinProcess::WinProcess(const WinProc& p, const WinCtx* c)
+	: proc(p), ctx(c), modules(this)
 {
-	proc = p;
-	ctx = c;
 }
 
 WinProcess::WinProcess(WinProcess&& rhs)
 {
-	proc = rhs.proc;
-	ctx = rhs.ctx;
-	modules.list = rhs.modules.list;
-	modules.size = rhs.modules.size;
-	modules.process = this;
-	rhs.modules.list = nullptr;
-	rhs.modules.size = 0;
+	*this = std::move(rhs);
 }
 
-WinProcess::~WinProcess()
+WinProcess& WinProcess::operator=(WinProcess&& rhs) noexcept
 {
-	if (modules.list)
-		for (size_t i = 0; i < modules.size; i++)
-			free(modules.list[i].info.name);
-	delete[] modules.list;
+	printf("MOVE\n");
+	proc = rhs.proc;
+	ctx = rhs.ctx;
+	modules = std::move(rhs.modules);
+	modules.process = this;
+	return *this;
+}
+
+void WinProcess::UpdateKernelModuleProcess(const WinProc& p)
+{
+	proc = p;
+	modules.kernel = true;
 }
 
 ssize_t WinProcess::Read(uint64_t address, void* buffer, size_t sz)
@@ -105,14 +154,3 @@ ssize_t WinProcess::Write(uint64_t address, void* buffer, size_t sz)
 	return VMemWrite(&ctx->process, proc.dirBase, (uint64_t)&buffer, address, sz);
 }
 
-void WinProcess::VerifyModuleList()
-{
-	if (!modules.list) {
-		WinModuleList ls = GenerateModuleList(ctx, &proc);
-		modules.list = new WinDll[ls.size];
-		modules.size = ls.size;
-		for (size_t i = 0; i < modules.size; i++)
-			modules.list[i] = WinDll(ctx, &proc, ls.list[i]);
-		free(ls.list);
-	}
-}

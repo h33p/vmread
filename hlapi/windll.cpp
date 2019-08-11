@@ -12,6 +12,12 @@ WinExportIteratableList::iterator WinExportIteratableList::end()
 	return iterator(&list, list.size);
 }
 
+size_t WinExportIteratableList::getSize()
+{
+	windll->VerifyExportList();
+	return list.size;
+}
+
 uint64_t WinDll::GetProcAddress(const char* procName)
 {
 	VerifyExportList();
@@ -20,17 +26,15 @@ uint64_t WinDll::GetProcAddress(const char* procName)
 
 WinDll::WinDll()
 {
-	ctx = nullptr;
 	process = nullptr;
 	exports.list.list = nullptr;
 	exports.list.size = 0;
 	exports.windll = this;
 }
 
-WinDll::WinDll(const WinCtx* c, const WinProc* p, WinModule& i)
+WinDll::WinDll(const WinProcess* p, WinModule& i)
 	: WinDll()
 {
-	ctx = c;
 	process = p;
 	info = i;
 }
@@ -39,7 +43,7 @@ WinDll::WinDll(WinDll&& rhs)
 {
 	info = rhs.info;
 	process = rhs.process;
-	ctx = rhs.ctx;
+	proc = rhs.proc;
 	exports = rhs.exports;
 	exports.windll = this;
 	rhs.exports.list.list = nullptr;
@@ -53,6 +57,12 @@ WinDll::~WinDll()
 
 void WinDll::VerifyExportList()
 {
+	if (proc.dirBase != process->proc.dirBase) {
+		proc = process->proc;
+		FreeExportList(exports.list);
+		memset(&exports.list, 0, sizeof(exports.list));
+	}
+
 	if (!exports.list.list)
-		GenerateExportList(ctx, process, info.baseAddress, &exports.list);
+		GenerateExportList(process->ctx, &proc, info.baseAddress, &exports.list);
 }

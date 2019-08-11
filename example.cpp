@@ -113,24 +113,12 @@ static void init()
 			}
 		}
 	
-		WinModuleList sysModules = GenerateKernelModuleList(&ctx.ctx);
+		WinProcess* processes[] = { ctx.processList.FindProc("System"), ctx.processList.FindProc("Steam.exe"), ctx.processList.FindProc("System") };
 
-		for (size_t i = 0; i < sysModules.size; i++) {
-			if (!strcasecmp(sysModules.list[i].name, "hidparse.sys")) {
-				WinExportList drvExports;
-				memset(&drvExports, 0, sizeof(drvExports));
-				GenerateExportList(&ctx.ctx, &ctx.ctx.initialProcess, sysModules.list[i].baseAddress, &drvExports);
-
-				fprintf(out, "%s kmod exports:\n", sysModules.list[i].name);
-
-				for (size_t o = 0; o < drvExports.size; o++)
-					fprintf(out, "%-40s\t%lx\n", drvExports.list[o].name, drvExports.list[o].address);
-
-				FreeExportList(drvExports);
-			}
-		}
-
-		FreeModuleList(sysModules);
+		for (auto& proc : processes)
+			for (auto& i : ctx.systemModuleList.Get(proc))
+				if (!strcasecmp(i.info.name, "win32kbase.sys"))
+					fprintf(out, "%s kmod export count: %zu\n", i.info.name, i.exports.getSize());
 
 	} catch (VMException& e) {
 		fprintf(out, "Initialization error: %d\n", e.value);

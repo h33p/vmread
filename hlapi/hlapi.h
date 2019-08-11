@@ -86,10 +86,11 @@ class WinExportIteratableList
 	using iterator = WinListIterator<WinExportList>;
 	iterator begin();
 	iterator end();
+	size_t getSize();
   private:
 	friend class WinListIterator<WinExportList>;
 	friend class WinDll;
-    class WinDll* windll;
+	class WinDll* windll;
 
 	WinExportList list;
 };
@@ -99,25 +100,25 @@ class WinDll
   public:
 	uint64_t GetProcAddress(const char* procName);
 	WinDll();
-	WinDll(const WinCtx* c, const WinProc* p, WinModule& i);
+	WinDll(const class WinProcess* p, WinModule& i);
 	WinDll(WinDll&& rhs);
 	WinDll(WinDll& rhs) = delete;
 	~WinDll();
 
-	auto& operator=(WinDll rhs)
+	auto& operator=(WinDll&& rhs)
 	{
 		info = rhs.info;
 		std::swap(exports.list, rhs.exports.list);
-		ctx = rhs.ctx;
 		process = rhs.process;
+		proc = rhs.proc;
 		return *this;
 	}
 
 	WinModule info;
 	WinExportIteratableList exports;
-	const WinCtx* ctx;
-	const WinProc* process;
+	const class WinProcess* process;
   private:
+	WinProc proc;
 	friend class WinExportIteratableList;
 	void VerifyExportList();
 };
@@ -126,13 +127,24 @@ class ModuleIteratableList
 {
   public:
 	using iterator = WinListIterator<ModuleIteratableList>;
+	ModuleIteratableList(bool k = false);
+	ModuleIteratableList(class WinProcess* p, bool k = false);
+	ModuleIteratableList(ModuleIteratableList&& rhs);
+	ModuleIteratableList(ModuleIteratableList& rhs) = delete;
+	~ModuleIteratableList();
+	ModuleIteratableList& operator=(ModuleIteratableList&& rhs) = default;
 	iterator begin();
 	iterator end();
 	size_t getSize();
+	void Verify();
+	void InvalidateList();
+	WinDll* GetModuleInfo(const char* moduleName);
   private:
 	friend class WinListIterator<ModuleIteratableList>;
 	friend class WinProcess;
+	friend class WinProcessList;
 	class WinProcess* process;
+	bool kernel;
 	WinDll* list;
 	size_t size;
 };
@@ -162,13 +174,15 @@ class WriteList
 class WinProcess
 {
   public:
+	[[deprecated("Please use ModuleIteratableList::GetModuleInfo")]]
 	WinDll* GetModuleInfo(const char* moduleName);
 	PEB GetPeb();
 	WinProcess();
 	WinProcess(const WinProc& p, const WinCtx* c);
 	WinProcess(WinProcess&& rhs);
 	WinProcess(WinProcess& rhs) = delete;
-	~WinProcess();
+	void UpdateKernelModuleProcess(const WinProc& p);
+	WinProcess& operator=(WinProcess&& rhs) noexcept;
 
 	ssize_t Read(uint64_t address, void* buffer, size_t sz);
 	ssize_t Write(uint64_t address, void* buffer, size_t sz);
@@ -187,22 +201,12 @@ class WinProcess
 		VMemWrite(&ctx->process, proc.dirBase, (uint64_t)&value, address, sizeof(T));
 	}
 
-	auto& operator=(WinProcess rhs)
-	{
-		std::swap(modules.list, rhs.modules.list);
-		std::swap(modules.size, rhs.modules.size);
-		ctx = rhs.ctx;
-		proc = rhs.proc;
-		return *this;
-	}
-
 	WinProc proc;
-	ModuleIteratableList modules;
 	const WinCtx* ctx;
+	ModuleIteratableList modules;
   protected:
 	friend class ModuleIteratableList;
 	friend class WriteList;
-	void VerifyModuleList();
 };
 
 class WinProcessList
@@ -235,6 +239,21 @@ class WinProcessList
 	void FreeProcessList();
 };
 
+class SystemModuleList
+{
+  public:
+
+	ModuleIteratableList& Get(WinProcess* p)
+	{
+		proc.UpdateKernelModuleProcess(p ? p->proc : proc.ctx->initialProcess);
+		return proc.modules;
+	}
+
+  private:
+	friend class WinContext;
+	WinProcess proc;
+};
+
 class WinContext
 {
   public:
@@ -255,10 +274,11 @@ class WinContext
 
 	WinContext(pid_t pid)
 	{
-	    int ret = InitializeContext(&ctx, pid);
+		int ret = InitializeContext(&ctx, pid);
 		if (ret)
 			throw VMException(ret);
 		processList = WinProcessList(&ctx);
+		systemModuleList.proc.ctx = &ctx;
 	}
 
 	~WinContext()
@@ -267,6 +287,7 @@ class WinContext
 	}
 
 	WinProcessList processList;
+	SystemModuleList systemModuleList;
 	WinCtx ctx;
 };
 
