@@ -461,9 +461,9 @@ static uint16_t GetNTVersion(const WinCtx* ctx)
 		if (!major && !minor)
 			if (*(uint32_t*)(void*)b == 0x441c748)
 				return ((uint16_t)b[4]) * 100 + (b[5] & 0xf);
-		if (!major && (*(uint32_t*)(void*)b & 0x441c7) == 0x441c7)
+		if (!major && (*(uint32_t*)(void*)b & 0xfffff) == 0x441c7)
 			major = b[3];
-		if (!minor && (*(uint32_t*)(void*)b & 0x841c7) == 0x841c7)
+		if (!minor && (*(uint32_t*)(void*)b & 0xfffff) == 0x841c7)
 			minor = b[3];
 	}
 
@@ -485,7 +485,8 @@ static uint32_t GetNTBuild(const WinCtx* ctx)
 
 	/* Find writes to rcx +12 -- that's where the version number is stored. These instructions are not on XP, but that is simply irrelevant. */
 	for (char* b = buf; b - buf < 0xf0; b++) {
-		if ((*(uint32_t*)(void*)b & 0x0c41c7) == 0x0c41c7)
+		uint32_t val = *(uint32_t*)(void*)b & 0xffffff;
+		if (val == 0x0c41c7 || val == 0x05c01b)
 			return *(uint32_t*)(void*)(b + 3);
 	}
 
