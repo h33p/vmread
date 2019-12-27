@@ -148,6 +148,6 @@ ssize_t WinProcess::Read(uint64_t address, void* buffer, size_t sz)
 
 ssize_t WinProcess::Write(uint64_t address, void* buffer, size_t sz)
 {
-	return VMemWrite(&ctx->process, proc.dirBase, (uint64_t)&buffer, address, sz);
+	return VMemWrite(&ctx->process, proc.dirBase, (uint64_t)buffer, address, sz);
 }
 
