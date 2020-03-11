@@ -279,6 +279,9 @@ WinProcList GenerateProcessList(const WinCtx* ctx)
 	list.size = 0;
 	size_t maxSize = 25;
 
+	size_t nameBufSize = 128;
+	wchar_t* buf = (wchar_t*)malloc(sizeof(wchar_t) * nameBufSize);
+
 	while (!list.size || curProc != ctx->initialProcess.physProcess) {
 		uint64_t session = MemReadU64(&ctx->process, curProc + ctx->offsets.session);
 		uint64_t dirBase = MemReadU64(&ctx->process, curProc + ctx->offsets.dirBase);
@@ -293,8 +296,55 @@ WinProcList GenerateProcessList(const WinCtx* ctx)
 				.pid = pid,
 			};
 
-			MemRead(&ctx->process, (uint64_t)list.list[list.size].name, curProc + ctx->offsets.imageFileName, 15);
-			list.list[list.size].name[15] = '\0';
+			// This method only works on Win10
+			if (ctx->ntVersion == 1000)
+			{
+
+				if (pid == 4)
+				{
+					char* buf2 = (char*)malloc(7);
+					memcpy(buf2, "System", 7);
+					list.list[list.size].name = buf2;
+				}
+				else
+				{
+					// _FILE_OBJECT*   ImageFilePointer @ 0x448
+					// _UNICODE_STRING FileName         @ 0x58
+
+					uint64_t imageFilePtr = MemReadU64(&ctx->process, curProc + 0x448);
+
+					UNICODE_STRING fileName = {0};
+					VMemRead(&ctx->process, dirBase, (uint64_t)&fileName, imageFilePtr + 0x58, sizeof(UNICODE_STRING));
+
+					if (fileName.length >= nameBufSize)
+					{
+						nameBufSize = fileName.length * 2;
+						buf = (wchar_t*)realloc(buf, sizeof(wchar_t) * nameBufSize);
+					}
+
+					VMemRead(&ctx->process, dirBase, (uint64_t)buf, fileName.buffer, fileName.length * sizeof(wchar_t));
+					char* buf2 = (char*)malloc(fileName.length);
+					for (int i = 0; i < fileName.length; i++)
+						buf2[i] = ((char*)buf)[i * 2];
+					buf2[fileName.length - 1] = '\0';
+
+					// Weird shit because I'm not sure how to get the basename correctly. There is probably a better way.
+					char* baseName;
+					(baseName = strrchr(buf2, '\\')) ? ++baseName : (baseName = buf2);
+
+					char* buf3 = (char*)malloc(strlen(baseName) + 1);
+					strcpy(buf3, baseName);
+
+					list.list[list.size].name = buf3;
+
+					free(buf2);
+				}
+			}
+			else
+			{
+				MemRead(&ctx->process, (uint64_t)list.list[list.size].name, curProc + ctx->offsets.imageFileName, 15);
+				list.list[list.size].name[15] = '\0';
+			}
 
 			list.size++;
 			if (list.size > 1000 || pid == 0)
@@ -317,6 +367,8 @@ WinProcList GenerateProcessList(const WinCtx* ctx)
 		if (!curProc)
 			break;
 	}
+
+	free(buf);
 
 	return list;
 }

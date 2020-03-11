@@ -63,6 +63,15 @@ WinProcessList::~WinProcessList()
 void WinProcessList::FreeProcessList()
 {
 	if (plist.list)
+	{
+		if (ctx->ntVersion == 1000)
+		{
+			for (size_t i = 0; i < plist.size; i++)
+				free(plist.list[i].name);
+		}
+
 		free(plist.list);
+	}
+
 	plist.list = nullptr;
 }
