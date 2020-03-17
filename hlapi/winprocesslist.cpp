@@ -62,7 +62,6 @@ WinProcessList::~WinProcessList()
 
 void WinProcessList::FreeProcessList()
 {
-	if (plist.list)
-		free(plist.list);
+	::FreeProcessList(plist);
 	plist.list = nullptr;
 }
