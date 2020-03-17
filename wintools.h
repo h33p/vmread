@@ -31,7 +31,7 @@ typedef struct WinProc
 	uint64_t physProcess;
 	uint64_t dirBase;
 	uint64_t pid;
-	char name[16];
+	char* name;
 } WinProc;
 
 typedef struct WinProcList
@@ -87,6 +87,7 @@ void FreeExportList(WinExportList list);
 uint64_t GetProcAddress(const WinCtx* ctx, const WinProc* process, uint64_t module, const char* procName);
 uint64_t FindProcAddress(const WinExportList exports, const char* procName);
 WinProcList GenerateProcessList(const WinCtx* ctx);
+void FreeProcessList(WinProcList list);
 WinModuleList GenerateModuleList(const WinCtx* ctx, const WinProc* process);
 WinModuleList GenerateKernelModuleList(const WinCtx* ctx);
 void FreeModuleList(WinModuleList list);

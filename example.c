@@ -61,7 +61,8 @@ void init()
 
 				break;
 			}
-		free(processList.list);
+
+		FreeProcessList(processList);
 	}
 	FreeContext(&ctx);
 	fclose(out);
