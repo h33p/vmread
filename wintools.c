@@ -281,12 +281,12 @@ WinProcList GenerateProcessList(const WinCtx* ctx)
 	size_t maxSize = 25;
 
 	while (!list.size || (curProc != ctx->initialProcess.physProcess && virtProcess != ctx->initialProcess.process)) {
-		uint64_t session = MemReadU64(&ctx->process, curProc + ctx->offsets.session);
+		uint64_t stackCount = MemReadU64(&ctx->process, curProc + ctx->offsets.stackCount);
 		uint64_t dirBase = MemReadU64(&ctx->process, curProc + ctx->offsets.dirBase);
 		uint64_t pid = MemReadU64(&ctx->process, curProc + ctx->offsets.apl - 8);
 
-		//Check if process is running by checking the session. System process never has a session, and this session checking does not seem to fully work on XP
-		if (session || pid == 4) {
+		/* The end of the process list usually has corrupted values, some sort of address, and we avoid the issue by checking the PID (which shouldn't be over 32 bit limit anyways) */
+		if (pid < 1u << 31 && stackCount) {
 			list.list[list.size] = (WinProc){
 				.process = virtProcess,
 				.physProcess = curProc,
@@ -518,6 +518,7 @@ static int SetupOffsets(WinCtx* ctx)
 		  ctx->offsets = (WinOffsets){
 			  .apl = 0xe0,
 			  .session = 0x260,
+			  .stackCount = 0xa0,
 			  .imageFileName = 0x268,
 			  .dirBase = 0x28,
 			  .peb = 0x2c0,
@@ -531,6 +532,7 @@ static int SetupOffsets(WinCtx* ctx)
 		  ctx->offsets = (WinOffsets){
 			  .apl = 0x188,
 			  .session = 0x2d8,
+			  .stackCount = 0xdc,
 			  .imageFileName = 0x2e0,
 			  .dirBase = 0x28,
 			  .peb = 0x338,
@@ -547,6 +549,7 @@ static int SetupOffsets(WinCtx* ctx)
 		  ctx->offsets = (WinOffsets){
 			  .apl = 0x2e8,
 			  .session = 0x430,
+			  .stackCount = 0x234,
 			  .imageFileName = 0x438,
 			  .dirBase = 0x28,
 			  .peb = 0x338, /*peb will be wrong on Windows 8 and 8.1*/
@@ -560,6 +563,7 @@ static int SetupOffsets(WinCtx* ctx)
 		  ctx->offsets = (WinOffsets){
 			  .apl = 0x2e8,
 			  .session = 0x430,
+			  .stackCount = 0x234,
 			  .imageFileName = 0x438,
 			  .dirBase = 0x28,
 			  .peb = 0x338,
@@ -573,6 +577,7 @@ static int SetupOffsets(WinCtx* ctx)
 		  ctx->offsets = (WinOffsets){
 			  .apl = 0x2e8,
 			  .session = 0x448,
+			  .stackCount = 0x23c,
 			  .imageFileName = 0x450,
 			  .dirBase = 0x28,
 			  .peb = 0x3f8,

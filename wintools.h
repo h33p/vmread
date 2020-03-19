@@ -16,6 +16,7 @@ typedef struct WinOffsets
 {
 	int64_t apl;
 	int64_t session;
+	int64_t stackCount;
 	int64_t imageFileName;
 	int64_t dirBase;
 	int64_t peb;
