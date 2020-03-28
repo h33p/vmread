@@ -12,7 +12,7 @@
 
 FILE* dfile;
 
-static unsigned long readbench(const WinProcess& process, size_t start, size_t end, size_t chunkSize, size_t totalSize, size_t *readCount)
+static unsigned long readbench(const WinProcess& process, size_t start, size_t end, size_t chunkSize, size_t chunkCount, size_t totalSize, size_t *readCount, size_t *totalRead)
 {
 	end -= chunkSize;
 	if (end <= start) {
@@ -20,27 +20,54 @@ static unsigned long readbench(const WinProcess& process, size_t start, size_t e
 		end = start + 1;
 	}
 
-	void* buf = malloc(chunkSize);
+	void** buf = (void**)malloc(chunkCount * sizeof(void*));
+
+	for (size_t i = 0; i < chunkCount; i++)
+		buf[i] = malloc(chunkSize);
+
+	std::vector<RWInfo> info;
+	info.resize(chunkCount);
 
 	size_t read = 0;
 	*readCount = 0;
+	*totalRead = 0;
 
 	std::random_device rd;
 	std::mt19937 eng(rd());
 	std::uniform_int_distribution<size_t> distr(start, end);
+	std::uniform_int_distribution<size_t> distrp(0, 0x2000);
+
+	size_t addr = distr(eng);
+	for (size_t i = 0; i < chunkCount; i++) {
+		size_t addrp = distrp(eng);
+		info[i].local = (uint64_t)buf[i];
+		info[i].size = chunkSize;
+		info[i].remote = addr + addrp;
+	}
 
 	auto beginTime = std::chrono::high_resolution_clock::now();
 
 	while(read < totalSize) {
 		size_t addr = distr(eng);
-		VMemRead(&process.ctx->process, process.proc.dirBase, (uint64_t)buf, addr, chunkSize);
-		read += chunkSize;
+		for (size_t i = 0; i < chunkCount; i++) {
+			size_t addrp = distrp(eng);
+			info[i].local = (uint64_t)buf[i];
+			info[i].size = chunkSize;
+			info[i].remote = addr + addrp;
+		}
+		(*totalRead) += VMemReadMul(&process.ctx->process, process.proc.dirBase, info.data(), chunkCount);
+		read += chunkSize * chunkCount;
 		(*readCount)++;
 	}
 
 	auto endTime = std::chrono::high_resolution_clock::now();
 
+	for (size_t i = 0; i < chunkCount; i++)
+		free(buf[i]);
+
 	free(buf);
+
+	*totalRead = read;
 
 	return std::chrono::duration_cast<std::chrono::microseconds>(endTime - beginTime).count();
 }
@@ -54,14 +81,15 @@ static const size_t chunkSizes[] =
 	0x8
 };
 
-static const size_t readSize = 1;
+static const size_t readSize = 64;
 
 static void runfullbench(FILE* out, const WinProcess& process, size_t start, size_t end)
 {
 	size_t readCount;
+	size_t totalRead;
 	for (const size_t i : chunkSizes) {
-		unsigned long time = readbench(process, start, end, i, 0x100000 * readSize, &readCount);
-		double speed = ((double)readSize * 10e5) / time;
+		unsigned long time = readbench(process, start, end, i, 8, 0x100000 * readSize, &readCount, &totalRead);
+		double speed = ((double)(totalRead / 0x100000) * 10e5) / time;
 		double callSpeed = ((double)readCount * 10e5) / time;
 		fprintf(out, "Reads of size 0x%lx: %.2lf Mb/s; %ld calls; %.2lf Calls/s\n", i, speed, readCount, callSpeed);
 	}

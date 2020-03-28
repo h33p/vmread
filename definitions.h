@@ -7,13 +7,13 @@
 #include <stdio.h>
 #include "processdata.h"
 
-extern FILE* dfile;
+extern FILE* vmread_dfile;
 
 #define MODE_EXTERNAL() 1
 #define MODE_QEMU_INJECT() 2
 #define MODE_DMA() 3
 
-#define DMSG(...) fprintf(dfile, __VA_ARGS__)
+#define DMSG(...) fprintf(vmread_dfile ? vmread_dfile : stdout, __VA_ARGS__)
 #define NMSG(...)
 #define PASTE(A, B) A##B
 

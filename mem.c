@@ -13,10 +13,8 @@
 #endif
 
 /* For how long should the cached page be valid */
-#ifdef USE_PAGECACHE
 #ifndef VT_CACHE_TIME_MS
 #define VT_CACHE_TIME_MS 1
-#endif
 
 #ifndef VT_CACHE_TIME_NS
 #define VT_CACHE_TIME_NS VT_CACHE_TIME_MS * 1000000
@@ -138,26 +136,42 @@ ssize_t VMemWriteMul(const ProcessData* data, uint64_t dirBase, RWInfo* info, si
   This is used to cache the pages touched last bu reads of VTranslate, this increases the performance of external mode by at least 2x for multiple consequitive reads in common area. Cached page expires after a set interval which should be small enough not to cause very serious harm
 */
 
+#if defined(USE_PAGECACHE) || !defined(NO_LVTCACHE)
+static __thread struct timespec vtCurTime;
+#endif
+
 #ifdef USE_PAGECACHE
 static __thread uint64_t vtCachePage[4] = { 0, 0, 0, 0 };
 static __thread char vtCache[4][0x1000];
 static __thread struct timespec vtCacheTime[4];
 #endif
 
+#ifndef NO_LVTCACHE
+static __thread uint64_t vtCachedResult = 0;
+static __thread uint64_t vtCachedInput = 0;
+static __thread uint64_t vtCachedResultDirBase = 0;
+static __thread struct timespec vtCachedResultTime;
+static __thread int vtCachedResultHits = 0;
+#endif
+
+static uint64_t VtUpdateCurTime()
+{
+#if defined(USE_PAGECACHE) || !defined(NO_LVTCACHE)
+	clock_gettime(CLOCK_MONOTONIC_COARSE, &vtCurTime);
+#endif
+}
+
 static uint64_t VtMemReadU64(const ProcessData* data, size_t idx, uint64_t address)
 {
 #ifdef USE_PAGECACHE
 	uint64_t page = address & ~0xfff;
 
-	struct timespec t;
-	clock_gettime(CLOCK_REALTIME, &t);
-
-	uint64_t timeDiff = (t.tv_sec - vtCacheTime[idx].tv_sec) * (uint64_t)1e9 + (t.tv_nsec - vtCacheTime[idx].tv_nsec);
+	uint64_t timeDiff = (vtCurTime.tv_sec - vtCacheTime[idx].tv_sec) * (uint64_t)1e9 + (vtCurTime.tv_nsec - vtCacheTime[idx].tv_nsec);
 
 	if (vtCachePage[idx] != page || timeDiff >= VT_CACHE_TIME_NS) {
 		MemRead(data, (uint64_t)vtCache[idx], page, 0x1000);
 		vtCachePage[idx] = page;
-		vtCacheTime[idx] = t;
+		vtCacheTime[idx] = vtCurTime;
 	}
 
 	return *(uint64_t*)(void*)(vtCache[idx] + (address & 0xfff));
@@ -167,14 +181,38 @@ static uint64_t VtMemReadU64(const ProcessData* data, size_t idx, uint64_t addre
 #endif
 }
 
+static uint64_t VtCheckCachedResult(uint64_t inAddress, uint64_t dirBase)
+{
+	VtUpdateCurTime();
+#ifndef NO_LVTCACHE
+	if ((vtCachedResultDirBase == dirBase) && (vtCachedInput == (inAddress & ~0xfff))) {
+		uint64_t timeDiff = (vtCurTime.tv_sec - vtCachedResultTime.tv_sec) * (uint64_t)1e9 + (vtCurTime.tv_nsec - vtCachedResultTime.tv_nsec);
+
+		if (timeDiff < VT_CACHE_TIME_NS) {
+			return vtCachedResult | (inAddress & 0xfff);
+		}
+	}
+#endif
+	return 0;
+}
+
+static void VtUpdateCachedResult(uint64_t inAddress, uint64_t address, uint64_t dirBase)
+{
+#ifndef NO_LVTCACHE
+	vtCachedResultTime = vtCurTime;
+	vtCachedResult = address & ~0xfff;
+	vtCachedInput = inAddress & ~0xfff;
+	vtCachedResultDirBase = dirBase;
+	vtCachedResultHits = 0;
+#endif
+}
+
 /*
   Translates a virtual address to a physical one. This (most likely) is windows specific and might need extra work to work on Linux target.
 */
 
-uint64_t VTranslate(const ProcessData* data, uint64_t dirBase, uint64_t address)
+static uint64_t VTranslateInternal(const ProcessData* data, uint64_t dirBase, uint64_t address)
 {
-	dirBase &= ~0xf;
-
 	uint64_t pageOffset = address & ~(~0ul << PAGE_OFFSET_SIZE);
 	uint64_t pte = ((address >> 12) & (0x1ffll));
 	uint64_t pt = ((address >> 21) & (0x1ffll));
@@ -209,6 +247,22 @@ uint64_t VTranslate(const ProcessData* data, uint64_t dirBase, uint64_t address)
 	return address + pageOffset;
 }
 
+uint64_t VTranslate(const ProcessData* data, uint64_t dirBase, uint64_t address)
+{
+	dirBase &= ~0xf;
+
+	uint64_t cachedVal = VtCheckCachedResult(address, dirBase);
+
+	if (cachedVal)
+		return cachedVal;
+
+	cachedVal = VTranslateInternal(data, dirBase, address);
+
+	VtUpdateCachedResult(address, cachedVal, dirBase);
+
+	return cachedVal;
+}
+
 /* Static functions */
 
 static int CalculateDataCount(RWInfo* info, size_t count)
@@ -224,6 +278,7 @@ static int CalculateDataCount(RWInfo* info, size_t count)
 static int FillRWInfoMul(const ProcessData* data, uint64_t dirBase, RWInfo* origData, RWInfo* info, size_t count)
 {
 	int ret = 0;
+
 	for (size_t i = 0; i < count; i++) {
 		int lcount = 0;
 		FillRWInfo(data, dirBase, info + ret, &lcount, origData[i].local, origData[i].remote, origData[i].size);
