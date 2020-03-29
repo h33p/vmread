@@ -674,6 +674,8 @@ static WinModule GetBaseModule(const WinCtx* ctx, const WinProc* process)
 	uint64_t prev = head+1;
 
 	do {
+		prev = head;
+
 		if (!FillModuleInfo64(ctx, process, &head, 1, &mod)) {
 			if (mod.baseAddress == peb.ImageBaseAddress) {
 				break;

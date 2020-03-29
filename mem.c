@@ -154,7 +154,7 @@ static __thread struct timespec vtCachedResultTime;
 static __thread int vtCachedResultHits = 0;
 #endif
 
-static uint64_t VtUpdateCurTime()
+static void VtUpdateCurTime()
 {
 #if defined(USE_PAGECACHE) || !defined(NO_LVTCACHE)
 	clock_gettime(CLOCK_MONOTONIC_COARSE, &vtCurTime);
