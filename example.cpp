@@ -81,17 +81,29 @@ static const size_t chunkSizes[] =
 	0x8
 };
 
+static const size_t chunkCounts[] =
+{
+	32,
+	8,
+	1
+};
+
 static const size_t readSize = 64;
 
 static void runfullbench(FILE* out, const WinProcess& process, size_t start, size_t end)
 {
 	size_t readCount;
 	size_t totalRead;
+
 	for (const size_t i : chunkSizes) {
-		unsigned long time = readbench(process, start, end, i, 8, 0x100000 * readSize, &readCount, &totalRead);
-		double speed = ((double)(totalRead / 0x100000) * 10e5) / time;
-		double callSpeed = ((double)readCount * 10e5) / time;
-		fprintf(out, "Reads of size 0x%lx: %.2lf Mb/s; %ld calls; %.2lf Calls/s\n", i, speed, readCount, callSpeed);
+		fprintf(out, "0x%lx", i);
+		for (const size_t o : chunkCounts) {
+			unsigned long time = readbench(process, start, end, i, o, 0x100000 * readSize, &readCount, &totalRead);
+			double speed = ((double)(totalRead / 0x100000) * 10e5) / time;
+			double callSpeed = ((double)readCount * 10e5) / time;
+			fprintf(out, ", %.2lf, %.2lf", speed, callSpeed);
+		}
+		fprintf(out, "\n");
 	}
 }
 
@@ -110,7 +122,7 @@ static void init()
 #endif
 	fprintf(out, "Using Mode: %s\n", TOSTRING(LMODE));
 
-	dfile = out;
+	vmread_dfile = out;
 
 	try {
 		WinContext ctx(pid);
@@ -134,8 +146,6 @@ static void init()
 					if (!strcmp("friendsui.DLL", o.info.name)) {
 						for (auto& u : o.exports)
 							fprintf(out, "\t\t%lx\t%s\n", u.address, u.name);
-						fprintf(out, "Performing memory benchmark...\n");
-						runfullbench(out, i, o.info.baseAddress, o.info.baseAddress + o.info.sizeOfModule);
 					}
 				}
 			}
@@ -147,6 +157,16 @@ static void init()
 			for (auto& i : ctx.systemModuleList.Get(proc))
 				if (!strcasecmp(i.info.name, "win32kbase.sys"))
 					fprintf(out, "%s kmod export count: %zu\n", i.info.name, i.exports.getSize());
+
+		WinProcess* steam = ctx.processList.FindProc("steam.exe");
+
+		if (steam) {
+			WinDll* mod = steam->modules.GetModuleInfo("friendsui.DLL");
+			if (mod) {
+				fprintf(out, "Performing memory benchmark...\n");
+				runfullbench(out, *steam, mod->info.baseAddress, mod->info.baseAddress + mod->info.sizeOfModule);
+			}
+		}
 
 	} catch (VMException& e) {
 		fprintf(out, "Initialization error: %d\n", e.value);
