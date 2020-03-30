@@ -2,6 +2,8 @@
 
 wintools.h and mem.h provide most of the functions callable to interract with the Windows VM, while hlapi abstracts everything in a bit simpler to use manner (requires C++).
 
+Rust bindings are available in a [separate repository](https://github.com/Heep042/vmread-rs).
+
 ##### Compiling
 Minimum language standard: C99
 The current example project is in C++, requiring at least C++11 with template support, but the C version also exists, which works fine on a C99 compiler.
