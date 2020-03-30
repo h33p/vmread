@@ -64,9 +64,12 @@ int InitializeContext(WinCtx* ctx, pid_t pid)
 	int fd = open("/proc/vmread", O_RDWR);
 
 	if (fd != -1) {
-		ioctl(fd, VMREAD_IOCTL_MAPVMMEM, &ctx->process);
+		int ret = ioctl(fd, VMREAD_IOCTL_MAPVMMEM, &ctx->process);
 		close(fd);
-	}
+		if (ret)
+			return 101;
+	} else
+		return 100;
 #endif
 
 	MSG(2, "Mem:\t%lx\t| Size:\t%lx\n", ctx->process.mapsStart, ctx->process.mapsSize);
