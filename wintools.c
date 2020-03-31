@@ -10,6 +10,11 @@
 #include <sys/ioctl.h>
 #endif
 
+#if (LMODE() != MODE_QEMU_INJECT())
+#include <sys/types.h>
+#include <dirent.h>
+#endif
+
 char* strdup(const char*);
 
 static int CheckLow(const WinCtx* ctx, uint64_t* pml4, uint64_t* kernelEntry);
@@ -31,11 +36,56 @@ FILE* vmread_dfile = NULL;
 #define HEADER_SIZE 0x1000
 #endif
 
+#if (LMODE() != MODE_QEMU_INJECT())
+static int RecursFind(const char* path, int level) {
+	if (level > 2)
+		return 0;
+
+	DIR* dir;
+	struct dirent* entry;
+	int ret = 0;
+
+	if (!(dir = opendir(path)))
+		return 0;
+
+	while (!ret && (entry = readdir(dir))) {
+		char npath[512];
+		if (entry->d_type == DT_DIR && ((level == 1 && entry->d_name[0] == 'f') ||
+					(entry->d_name[0] >= '0' && entry->d_name[0] <= '9'))) {
+			snprintf(npath, sizeof(npath), "%s/%s", path, entry->d_name);
+			ret = RecursFind(npath, level + 1);
+		} else if (level >= 2) {
+			snprintf(npath, sizeof(npath), "%s/%s", path, entry->d_name);
+			uint64_t dirv = 0;
+			uint64_t kvm = *(uint64_t*)"/dev/kvm";
+			if (readlink(npath, (char*)&dirv, 8) == 8 && dirv == kvm)
+				sscanf(path, "/proc/%d/", &ret);
+		}
+	}
+	closedir(dir);
+
+	return ret;
+}
+#endif
+
+static pid_t FindKVMProcess()
+{
+#if (LMODE() == MODE_QEMU_INJECT())
+	return getpid();
+#else
+	pid_t ret = RecursFind("/proc", 0);
+	return ret > 0 ? ret : 0;
+#endif
+}
+
 int InitializeContext(WinCtx* ctx, pid_t pid)
 {
 	memset(ctx, 0, sizeof(WinCtx));
 
 	uint64_t pml4, kernelEntry;
+
+	if (pid == 0 && (pid = FindKVMProcess()) == 0)
+		return -1;
 
 	procmaps_struct* maps = pmparser_parse(pid);
 
@@ -226,7 +276,7 @@ int GenerateExportList(const WinCtx* ctx, const WinProc* process, uint64_t modul
 	IMAGE_NT_HEADERS64* ntHeader64 = GetNTHeader(ctx, process, moduleBase, headerBuf, &is64);
 
 	if (!ntHeader64)
-		return 1;
+		return -1;
 
 	IMAGE_NT_HEADERS32* ntHeader32 = (IMAGE_NT_HEADERS32*)ntHeader64;
 
@@ -238,7 +288,7 @@ int GenerateExportList(const WinCtx* ctx, const WinProc* process, uint64_t modul
 
 	ret = ParseExportTable(ctx, process, moduleBase, exportTable, outList);
 
-	return ret != 0;
+	return ret;
 }
 
 void FreeExportList(WinExportList list)

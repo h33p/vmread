@@ -75,11 +75,9 @@ uint64_t VMemReadU64(const ProcessData* data, uint64_t dirBase, uint64_t remote)
 	return dest;
 }
 
-uint64_t VMemWriteU64(const ProcessData* data, uint64_t dirBase, uint64_t remote)
+ssize_t VMemWriteU64(const ProcessData* data, uint64_t dirBase, uint64_t remote, uint64_t value)
 {
-	uint64_t dest;
-	MemRead(data, (uint64_t)&dest, VTranslate(data, dirBase, remote), sizeof(uint64_t));
-	return dest;
+	return MemRead(data, (uint64_t)&value, VTranslate(data, dirBase, remote), sizeof(uint64_t));
 }
 
 uint64_t MemReadU64(const ProcessData* data, uint64_t remote)
@@ -89,11 +87,9 @@ uint64_t MemReadU64(const ProcessData* data, uint64_t remote)
 	return dest;
 }
 
-uint64_t MemWriteU64(const ProcessData* data, uint64_t remote)
+ssize_t MemWriteU64(const ProcessData* data, uint64_t remote, uint64_t value)
 {
-	uint64_t dest;
-	MemRead(data, (uint64_t)&dest, remote, sizeof(uint64_t));
-	return dest;
+	return MemRead(data, (uint64_t)&value, remote, sizeof(uint64_t));
 }
 
 ssize_t VMemReadMul(const ProcessData* data, uint64_t dirBase, RWInfo* info, size_t num)
