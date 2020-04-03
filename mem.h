@@ -200,6 +200,25 @@ ssize_t VMemWriteMul(const ProcessData* data, uint64_t dirBase, RWInfo* info, si
  */
 uint64_t VTranslate(const ProcessData* data, uint64_t dirBase, uint64_t address);
 
+/**
+ * @brief Set translation cache validity time in msecs
+ *
+ * @param newTime new validity length for a cache entry
+ *
+ * Defines for how long translation caches (TLB and page buffer) should be valid. Higher values lead to higher
+ * performance, but could potentially lead to incorrect translation if the page tables update in that period.
+ * Especially dangerous if write operations are to be performed.
+ */
+void SetMemCacheTime(size_t newTime);
+
+/**
+ * @brief Get the default cache validity
+ *
+ * @return
+ * Default cache validity time
+ */
+size_t GetDefaultMemCacheTime();
+
 #ifdef __cplusplus
 }
 #endif

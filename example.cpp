@@ -11,6 +11,7 @@
 #define TOSTRING(x) STRINGIFY(x)
 
 FILE* dfile;
+extern int vtTLBHits, vtTLBMisses;
 
 static unsigned long readbench(const WinProcess& process, size_t start, size_t end, size_t chunkSize, size_t chunkCount, size_t totalSize, size_t *readCount, size_t *totalRead)
 {
@@ -153,20 +154,20 @@ static void init()
 				if (!strcasecmp(i.info.name, "win32kbase.sys"))
 					fprintf(out, "%s kmod export count: %zu\n", i.info.name, i.exports.getSize());
 
-		WinProcess* steam = ctx.processList.FindProc("steam.exe");
+		WinProcess* steam = ctx.processList.FindProc("Steam.exe");
 
 		if (steam) {
 			WinDll* mod = steam->modules.GetModuleInfo("friendsui.DLL");
 			if (mod) {
 				fprintf(out, "Performing memory benchmark...\n");
+				SetMemCacheTime(1000);
 				runfullbench(out, *steam, mod->info.baseAddress, mod->info.baseAddress + mod->info.sizeOfModule);
+				SetMemCacheTime(GetDefaultMemCacheTime());
 			}
 		}
-
 	} catch (VMException& e) {
 		fprintf(out, "Initialization error: %d\n", e.value);
 	}
-
 
 	fclose(out);
 }

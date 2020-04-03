@@ -15,11 +15,11 @@
 /* For how long should the cached page be valid */
 #ifndef VT_CACHE_TIME_MS
 #define VT_CACHE_TIME_MS 1
+#endif
 
-#ifndef VT_CACHE_TIME_NS
-#define VT_CACHE_TIME_NS VT_CACHE_TIME_MS * 1000000
-#endif
-#endif
+static size_t vtCacheTimeMS = VT_CACHE_TIME_MS;
+
+#define VT_CACHE_TIME_NS vtCacheTimeMS * 1000000ll
 
 static const uint64_t PMASK = (~0xfull << 8) & 0xfffffffffull;
 static void FillRWInfo(const ProcessData* data, uint64_t dirBase, RWInfo* info, int* count, uint64_t local, uint64_t remote, size_t len);
@@ -132,7 +132,7 @@ ssize_t VMemWriteMul(const ProcessData* data, uint64_t dirBase, RWInfo* info, si
   This is used to cache the pages touched last bu reads of VTranslate, this increases the performance of external mode by at least 2x for multiple consequitive reads in common area. Cached page expires after a set interval which should be small enough not to cause very serious harm
 */
 
-#if defined(USE_PAGECACHE) || !defined(NO_LVTCACHE)
+#if defined(USE_PAGECACHE) || !defined(NO_TLB)
 static __thread struct timespec vtCurTime;
 #endif
 
@@ -142,17 +142,31 @@ static __thread char vtCache[4][0x1000];
 static __thread struct timespec vtCacheTime[4];
 #endif
 
-#ifndef NO_LVTCACHE
-static __thread uint64_t vtCachedResult = 0;
-static __thread uint64_t vtCachedInput = 0;
-static __thread uint64_t vtCachedResultDirBase = 0;
-static __thread struct timespec vtCachedResultTime;
-static __thread int vtCachedResultHits = 0;
+#ifndef NO_TLB
+int vtTLBHits = 0;
+int vtTLBMisses = 0;
+
+typedef struct {
+	uint64_t page;
+	uint64_t dirBase;
+	uint64_t translation;
+	struct timespec resultTime;
+} tlbentry_t;
+
+// This makes the cache fit in 12 pages
+#ifndef TLB_SIZE
+#define TLB_SIZE 1024
 #endif
+static __thread tlbentry_t vtTlb[TLB_SIZE];
+#endif
+
+static size_t GetTlbIndex(uint64_t address) {
+	return (address >> 12l) % TLB_SIZE;
+}
 
 static void VtUpdateCurTime()
 {
-#if defined(USE_PAGECACHE) || !defined(NO_LVTCACHE)
+#if defined(USE_PAGECACHE) || !defined(NO_TLB)
 	clock_gettime(CLOCK_MONOTONIC_COARSE, &vtCurTime);
 #endif
 }
@@ -180,12 +194,14 @@ static uint64_t VtMemReadU64(const ProcessData* data, size_t idx, uint64_t addre
 static uint64_t VtCheckCachedResult(uint64_t inAddress, uint64_t dirBase)
 {
 	VtUpdateCurTime();
-#ifndef NO_LVTCACHE
-	if ((vtCachedResultDirBase == dirBase) && (vtCachedInput == (inAddress & ~0xfff))) {
-		uint64_t timeDiff = (vtCurTime.tv_sec - vtCachedResultTime.tv_sec) * (uint64_t)1e9 + (vtCurTime.tv_nsec - vtCachedResultTime.tv_nsec);
+#ifndef NO_TLB
+	tlbentry_t* tlb = &vtTlb[GetTlbIndex(inAddress)];
+	if ((tlb->dirBase == dirBase) && (tlb->page == (inAddress & ~0xfff))) {
+		uint64_t timeDiff = (vtCurTime.tv_sec - tlb->resultTime.tv_sec) * (uint64_t)1e9 + (vtCurTime.tv_nsec - tlb->resultTime.tv_nsec);
 
 		if (timeDiff < VT_CACHE_TIME_NS) {
-			return vtCachedResult | (inAddress & 0xfff);
+			vtTLBHits++;
+			return tlb->translation | (inAddress & 0xfff);
 		}
 	}
 #endif
@@ -194,12 +210,13 @@ static uint64_t VtCheckCachedResult(uint64_t inAddress, uint64_t dirBase)
 
 static void VtUpdateCachedResult(uint64_t inAddress, uint64_t address, uint64_t dirBase)
 {
-#ifndef NO_LVTCACHE
-	vtCachedResultTime = vtCurTime;
-	vtCachedResult = address & ~0xfff;
-	vtCachedInput = inAddress & ~0xfff;
-	vtCachedResultDirBase = dirBase;
-	vtCachedResultHits = 0;
+#ifndef NO_TLB
+	tlbentry_t* tlb = &vtTlb[GetTlbIndex(inAddress)];
+	tlb->resultTime = vtCurTime;
+	tlb->translation = address & ~0xfff;
+	tlb->page = inAddress & ~0xfff;
+	tlb->dirBase = dirBase;
+	vtTLBMisses++;
 #endif
 }
 
@@ -257,6 +274,17 @@ uint64_t VTranslate(const ProcessData* data, uint64_t dirBase, uint64_t address)
 	VtUpdateCachedResult(address, cachedVal, dirBase);
 
 	return cachedVal;
+}
+
+void SetMemCacheTime(size_t newTime)
+{
+	if (newTime >= 0)
+		vtCacheTimeMS = newTime;
+}
+
+size_t GetDefaultMemCacheTime()
+{
+	return VT_CACHE_TIME_MS;
 }
 
 /* Static functions */
