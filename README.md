@@ -13,7 +13,7 @@ Use meson and ninja to compile the example programs
 Use make to compile the kernel module
 
 ##### Performance
-Internal (QEMU inject) mode is roughly 7 times faster than external mode. However, it is possible to use the kernel module to map the memory space of QEMU into the external process, mitigating the performance penalty. Also, when performing larger reads, the memcpy quickly reaches its peak speed and external mode begins to catch up. Performance numbers are shown below.
+Internal (QEMU inject) mode is roughly 5 times faster than external mode. However, it is possible to use the kernel module to map the memory space of QEMU into the external process, mitigating the performance penalty. Also, when performing larger reads, the memcpy quickly reaches its peak speed and external mode begins to catch up. Performance numbers are shown below.
 
 ![alt text](https://github.com/Heep042/vmread/raw/master/rwperf.png "Read performance")
 
