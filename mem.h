@@ -25,6 +25,11 @@ typedef struct RWInfo
 	size_t size;
 } RWInfo;
 
+typedef struct {
+	size_t tlbHits;
+	size_t tlbMisses;
+} tlb_t;
+
 /**
  * @brief Read a piece of data in physical VM address space
  *
@@ -217,7 +222,44 @@ void SetMemCacheTime(size_t newTime);
  * @return
  * Default cache validity time
  */
-size_t GetDefaultMemCacheTime();
+size_t GetDefaultMemCacheTime(void);
+
+/**
+ * @brief Retrieve current thread's TLB
+ *
+ * Memory TLB utilizes thread local storage to make the code concurrant. However, it might be beneficial to
+ * access the TLB structure to verify its entries asynchronously during idle. This allows to access the
+ * said TLB to do just that.
+ *
+ * @return
+ * TLB of the running thread
+ */
+tlb_t* GetTlb(void);
+
+/**
+ * @brief Verify the TLB entries
+ *
+ * @param data VM process data
+ * @param tlb TLB structure to verify
+ * @param splitCount how many splits there are
+ * @param splitID which slice to verify
+ *
+ * This allows to verify the TLB structure before initializing a round of memory operations. Useful when the
+ * same memory addresses are being accessed in a loop with some delay. During the said delay we could verify
+ * the TLB structure in (optionally) multithreaded way to make the memory operations fast.
+ *
+ * splitCount allows us to split the TLB entries to verify to separate threads. Passing 1 to splitCount makes
+ * the function verify the entirety of TLB (single-threaded scenario)
+ */
+void VerifyTlb(const ProcessData* data, tlb_t* tlb, size_t splitCount, size_t splitID);
+
+/**
+ * @brief Flush all TLB entries
+ *
+ * @param tlb TLB structure to flush
+ *
+ */
+void FlushTlb(tlb_t* tlb);
 
 #ifdef __cplusplus
 }

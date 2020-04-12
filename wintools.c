@@ -57,7 +57,7 @@ static int RecursFind(const char* path, int level) {
 		} else if (level >= 2) {
 			snprintf(npath, sizeof(npath), "%s/%s", path, entry->d_name);
 			uint64_t dirv = 0;
-			uint64_t kvm = *(uint64_t*)"/dev/kvm";
+			const uint64_t kvm = *(uint64_t*)(void*)"/dev/kvm";
 			if (readlink(npath, (char*)&dirv, 8) == 8 && dirv == kvm)
 				sscanf(path, "/proc/%d/", &ret);
 		}

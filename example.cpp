@@ -154,13 +154,14 @@ static void init()
 				if (!strcasecmp(i.info.name, "win32kbase.sys"))
 					fprintf(out, "%s kmod export count: %zu\n", i.info.name, i.exports.getSize());
 
-		WinProcess* steam = ctx.processList.FindProc("Steam.exe");
+		WinProcess* steam = ctx.processList.FindProcNoCase("Steam.exe");
 
 		if (steam) {
 			WinDll* mod = steam->modules.GetModuleInfo("friendsui.DLL");
 			if (mod) {
 				fprintf(out, "Performing memory benchmark...\n");
 				SetMemCacheTime(1000);
+				FlushTlb(GetTlb());
 				runfullbench(out, *steam, mod->info.baseAddress, mod->info.baseAddress + mod->info.sizeOfModule);
 				SetMemCacheTime(GetDefaultMemCacheTime());
 			}
