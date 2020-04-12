@@ -217,8 +217,14 @@ void VerifyTlb(const ProcessData* data, tlb_t* tlbIn, size_t splitCount, size_t 
 	size_t start = TLB_SIZE * splitID / splitCount;
 	size_t end = TLB_SIZE * (splitID + 1) / splitCount;
 
-	for (size_t i = start; i < end; i++)
-		tlb->entries[i].translation = VTranslateInternal(data, tlb, tlb->entries[i].page, tlb->entries[i].dirBase);
+	for (size_t i = start; i < end; i++) {
+		tlbentry_t entry = tlb->entries[i];
+		tlb->entries[i] = (tlbentry_t) {
+			.page = entry.page,
+			.dirBase = entry.dirBase,
+			.translation = VTranslateInternal(data, tlb, entry.page, entry.dirBase)
+		};
+	}
 
 	struct timespec time = GetTime();
 
@@ -281,14 +287,14 @@ static uint64_t VtCheckCachedResult(_tlb_t* tlb, uint64_t inAddress, uint64_t di
 {
 	VtUpdateCurTime(tlb);
 	size_t index = GetTlbIndex(inAddress);
-	tlbentry_t* tlbEntry = &tlb->entries[index];
-	struct timespec* tlbEntryTime = &tlb->entryTimes[index];
-	if ((tlbEntry->dirBase == dirBase) && (tlbEntry->page == (inAddress & ~0xfff))) {
-		uint64_t timeDiff = (tlb->curTime.tv_sec - tlbEntryTime->tv_sec) * (uint64_t)1e9 + (tlb->curTime.tv_nsec - tlbEntryTime->tv_nsec);
+	tlbentry_t tlbEntry = tlb->entries[index];
+	struct timespec tlbEntryTime = tlb->entryTimes[index];
+	if ((tlbEntry.dirBase == dirBase) && (tlbEntry.page == (inAddress & ~0xfff))) {
+		uint64_t timeDiff = (tlb->curTime.tv_sec - tlbEntryTime.tv_sec) * (uint64_t)1e9 + (tlb->curTime.tv_nsec - tlbEntryTime.tv_nsec);
 
 		if (timeDiff < VT_CACHE_TIME_NS) {
 			tlb->tlbHits++;
-			return tlbEntry->translation | (inAddress & 0xfff);
+			return tlbEntry.translation | (inAddress & 0xfff);
 		}
 	}
 	return 0;
@@ -298,10 +304,11 @@ static void VtUpdateCachedResult(_tlb_t* tlb, uint64_t inAddress, uint64_t addre
 {
 	size_t index = GetTlbIndex(inAddress);
 	tlb->entryTimes[index] = tlb->curTime;
-	tlbentry_t* tlbEntry = &tlb->entries[index];
-	tlbEntry->translation = address & ~0xfff;
-	tlbEntry->page = inAddress & ~0xfff;
-	tlbEntry->dirBase = dirBase;
+	tlb->entries[index] = (tlbentry_t) {
+		.translation = address & ~0xfff,
+		.page = inAddress & ~0xfff,
+		.dirBase = dirBase
+	};
 	tlb->tlbMisses++;
 }
 
