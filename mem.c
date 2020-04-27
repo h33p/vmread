@@ -88,7 +88,7 @@ ssize_t VMemRead(const ProcessData* data, uint64_t dirBase, uint64_t local, uint
 	FillRWInfo(data, dirBase, rdata, &dataCount, local, remote, size);
 	ssize_t ret = MemReadMul(data, rdata, dataCount);
 
-	if (dataCount > MAX_BATCHED_RW)
+	if (rdata != rdataStack)
 		free(rdata);
 
 	return ret;
@@ -109,7 +109,7 @@ ssize_t VMemWrite(const ProcessData* data, uint64_t dirBase, uint64_t local, uin
 	FillRWInfo(data, dirBase, wdata, &dataCount, local, remote, size);
 	ssize_t ret = MemWriteMul(data, wdata, dataCount);
 
-	if (dataCount > MAX_BATCHED_RW)
+	if (wdata != wdataStack)
 		free(wdata);
 
 	return ret;
@@ -145,13 +145,13 @@ ssize_t VMemReadMul(const ProcessData* data, uint64_t dirBase, RWInfo* info, siz
 	RWInfo readInfoStack[MAX_BATCHED_RW];
 	RWInfo* readInfo = readInfoStack;
 
-	if (num > MAX_BATCHED_RW)
-		readInfo = (RWInfo*)malloc(sizeof(RWInfo) * num);
+	if (dataCount > MAX_BATCHED_RW)
+		readInfo = (RWInfo*)malloc(sizeof(RWInfo) * dataCount);
 
 	dataCount = FillRWInfoMul(data, dirBase, info, readInfo, num);
 	ssize_t ret = MemReadMul(data, readInfo, dataCount);
 
-	if (num > MAX_BATCHED_RW)
+	if (readInfo != readInfoStack)
 		free(readInfo);
 
 	return ret;
@@ -163,13 +163,13 @@ ssize_t VMemWriteMul(const ProcessData* data, uint64_t dirBase, RWInfo* info, si
 	RWInfo writeInfoStack[MAX_BATCHED_RW];
 	RWInfo* writeInfo = writeInfoStack;
 
-	if (num > MAX_BATCHED_RW)
-			writeInfo = (RWInfo*)malloc(sizeof(RWInfo) * num);
+	if (dataCount > MAX_BATCHED_RW)
+			writeInfo = (RWInfo*)malloc(sizeof(RWInfo) * dataCount);
 
 	dataCount = FillRWInfoMul(data, dirBase, info, writeInfo, num);
 	ssize_t ret = MemWriteMul(data, writeInfo, dataCount);
 
-	if (num > MAX_BATCHED_RW)
+	if (writeInfo != writeInfoStack)
 		free(writeInfo);
 
 	return ret;
@@ -354,7 +354,7 @@ static int CalculateDataCount(RWInfo* info, size_t count)
 	int ret = 0;
 
 	for (size_t i = 0; i < count; i++)
-		ret += ((info[i].remote + info[i].size - 1) >> 12ull) - (info[i].remote >> 12ull);
+		ret += 1 + ((info[i].remote + info[i].size - 1) >> 12ull) - (info[i].remote >> 12ull);
 
 	return ret;
 }
