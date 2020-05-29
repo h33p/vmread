@@ -18,7 +18,7 @@
 char* strdup(const char*);
 
 static int CheckLow(const WinCtx* ctx, uint64_t* pml4, uint64_t* kernelEntry);
-static uint64_t FindNTKernel(const WinCtx* ctx, uint64_t kernelEntry);
+static void FindNTKernel(WinCtx* ctx, uint64_t kernelEntry);
 static uint16_t GetNTVersion(const WinCtx* ctx);
 static uint32_t GetNTBuild(const WinCtx* ctx);
 static int SetupOffsets(WinCtx* ctx);
@@ -130,14 +130,14 @@ int InitializeContext(WinCtx* ctx, pid_t pid)
 	MSG(2, "PML4:\t%lx\t| KernelEntry:\t%lx\n", pml4, kernelEntry);
 
 	ctx->initialProcess.dirBase = pml4;
-	ctx->ntKernel = FindNTKernel(ctx, kernelEntry);
+	FindNTKernel(ctx, kernelEntry);
 
 	if (!ctx->ntKernel) {
 		/* Test in case we are running XP (QEMU AddressSpace is different) */
 #if (LMODE() != MODE_DMA())
 		KFIXC = 0x40000000ll * 4;
 		KFIXO = 0x40000000;
-		ctx->ntKernel = FindNTKernel(ctx, kernelEntry);
+		FindNTKernel(ctx, kernelEntry);
 #endif
 
 		if (!ctx->ntKernel)
@@ -145,9 +145,6 @@ int InitializeContext(WinCtx* ctx, pid_t pid)
 	}
 
 	MSG(2, "Kernel Base:\t%lx (%lx)\n", ctx->ntKernel, VTranslate(&ctx->process, ctx->initialProcess.dirBase, ctx->ntKernel));
-
-	if (GenerateExportList(ctx, &ctx->initialProcess, ctx->ntKernel, &ctx->ntExports))
-		return 5;
 
 	uint64_t initialSystemProcess = FindProcAddress(ctx->ntExports, "PsInitialSystemProcess");
 
@@ -488,10 +485,12 @@ static int CheckLow(const WinCtx* ctx, uint64_t* pml4, uint64_t* kernelEntry)
 	return 0;
 }
 
-static uint64_t FindNTKernel(const WinCtx* ctx, uint64_t kernelEntry)
+static void FindNTKernel(WinCtx* ctx, uint64_t kernelEntry)
 {
 	uint64_t i, o, p, u, mask = 0xfffff;
 	char buf[0x10000];
+
+	ctx->ntKernel = 0;
 
 	while (mask >= 0xfff) {
 		for (i = (kernelEntry & ~0x1fffff) + 0x20000000; i > kernelEntry - 0x20000000; i -= 0x200000) {
@@ -503,8 +502,14 @@ static uint64_t FindNTKernel(const WinCtx* ctx, uint64_t kernelEntry)
 						for (u = 0; u < 0x1000; u++) {
 							kdbg = kdbg || *(uint64_t*)(void*)(buf + p + u) == 0x4742444b54494e49;
 							poolCode = poolCode || *(uint64_t*)(void*)(buf + p + u) == 0x45444f434c4f4f50;
-							if (kdbg & poolCode)
-								return i + 0x10000 * o + p;
+							if (kdbg & poolCode) {
+								ctx->ntKernel = i + 0x10000 * o + p;
+								if (GenerateExportList(ctx, &ctx->initialProcess, ctx->ntKernel, &ctx->ntExports)) {
+									ctx->ntKernel = 0;
+									break;
+								}
+								return;
+							}
 						}
 					}
 				}
@@ -513,8 +518,6 @@ static uint64_t FindNTKernel(const WinCtx* ctx, uint64_t kernelEntry)
 
 		mask = mask >> 4;
 	}
-
-	return 0;
 }
 
 static uint16_t GetNTVersion(const WinCtx* ctx)
