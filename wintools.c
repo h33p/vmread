@@ -551,6 +551,17 @@ static uint16_t GetNTVersion(const WinCtx* ctx)
 
 static uint32_t GetNTBuild(const WinCtx* ctx)
 {
+    uint64_t ntBuild = FindProcAddress(ctx->ntExports, "NtBuildNumber");
+
+    if (ntBuild) {
+        uint32_t build = 0;
+
+        VMemRead(&ctx->process, ctx->initialProcess.dirBase, (uint64_t)&build, ntBuild, sizeof(build));
+
+        if (build)
+            return build & 0xffffff;
+    }
+
 	uint64_t getVersion = FindProcAddress(ctx->ntExports, "RtlGetVersion");
 
 	if (!getVersion)
