@@ -13,6 +13,7 @@ MODULE_LICENSE("GPL");
 
 static int vmreadinit(void);
 static void vmreadexit(void);
+static unsigned long get_kernel_symbol_address(const char *name);
 static void vmmap(ProcessData* data);
 static long vmread_ioctl(struct file* filp, unsigned int cmd, unsigned long argp);
 
@@ -21,7 +22,7 @@ module_exit(vmreadexit);
 
 #define KSYMDEC(x) static typeof(&x) _##x = NULL
 #define KSYM(x) _##x
-#define KSYMDEF(x) _##x = (typeof(&x))kallsyms_lookup_name(#x)
+#define KSYMDEF(x) _##x = (typeof(&x))get_kernel_symbol_address(#x)
 
 KSYMDEC(insert_vm_struct);
 KSYMDEC(vm_area_alloc);
@@ -53,6 +54,23 @@ static void vmreadexit(void)
 {
 	remove_proc_entry("vmread", NULL);
 	printk("vmread: uninitialized\n");
+}
+
+static unsigned long get_kernel_symbol_address(const char *name)
+{
+	const unsigned long text_section_start = 0xffffffff98e00000;
+	const unsigned long text_section_end = 0xffffffff99c00e81;
+
+	unsigned long offset;
+	for (offset = text_section_start; offset <= text_section_end; offset += 0x1)
+	{
+		char buffer[256];
+		snprintf(buffer, 256, "%pf", (void *)offset);
+		if (!strcmp(name, buffer))
+			return offset;
+	}
+
+	return 0;
 }
 
 static long vmread_ioctl(struct file* filp, unsigned int cmd, unsigned long argp)
