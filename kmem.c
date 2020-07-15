@@ -5,6 +5,7 @@
 #include <linux/printk.h>
 #include <linux/uaccess.h>
 #include <linux/kallsyms.h>
+#include <linux/jiffies.h>
 #include "kmem.h"
 
 MODULE_DESCRIPTION("vmread in-kernel helper used to accelerate memory operations");
@@ -58,16 +59,19 @@ static void vmreadexit(void)
 
 static unsigned long get_kernel_symbol_address(const char *name)
 {
-	const unsigned long text_section_start = 0xffffffff98e00000;
-	const unsigned long text_section_end = 0xffffffff99c00e81;
+	const unsigned long in_data_section = (unsigned long)&jiffies; // Exported variable in the data section (D) used for counting ticks
 
+	bool found_symbol = false;
 	unsigned long offset;
-	for (offset = text_section_start; offset <= text_section_end; offset += 0x1)
+	for (offset = in_data_section; offset >= 0; offset -= 0x1)
 	{
 		char buffer[256];
 		snprintf(buffer, 256, "%pf", (void *)offset);
 		if (!strcmp(name, buffer))
-			return offset;
+			found_symbol = true; // We have found the function, now we just need to find the start of it
+		else if (found_symbol)
+			return offset += 0x1;
+		
 	}
 
 	return 0;
