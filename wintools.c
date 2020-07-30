@@ -661,6 +661,15 @@ static int SetupOffsets(WinCtx* ctx)
 			  ctx->offsets.threadListEntry = 0x6b8;
 		  }
 
+		  if (ctx->ntBuild >= 19041) { /* Version 19041 or higher */
+			  ctx->offsets.apl = 0x448;
+			  ctx->offsets.stackCount = 0x348;
+			  ctx->offsets.imageFileName = 0x5a8;
+			  ctx->offsets.peb = 0x550;
+			  ctx->offsets.threadListHead = 0x5e0;
+			  ctx->offsets.threadListEntry = 0x4e8;
+		  }
+
 		  break;
 	  default:
 		  return 1;
