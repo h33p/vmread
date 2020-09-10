@@ -203,7 +203,7 @@ typedef struct _PEB
 {
 	uint8_t InheritedAddressSpace;
 	uint8_t ReadImageFileExecOptions;
-	uint8_t BeingFebugged;
+	uint8_t BeingDebugged;
 	uint8_t BitField;
 	uint8_t Padding0[4];
 	uint64_t Mutant;
@@ -255,7 +255,7 @@ typedef struct _PEB32
 {
 	uint8_t InheritedAddressSpace;
 	uint8_t ReadImageFileExecOptions;
-	uint8_t BeingFebugged;
+	uint8_t BeingDebugged;
     uint8_t BitField;
 	uint32_t Mutant;
 	uint32_t ImageBaseAddress;
