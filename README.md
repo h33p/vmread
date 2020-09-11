@@ -1,5 +1,8 @@
 # A library to read/write memory to Windows running inside of KVM
 
+## End-of-life
+#### This library is not supported anymore. Please use [memflow](https://github.com/memflow/memflow) for more up-to-date and versatile VM introspection tools.
+
 wintools.h and mem.h provide most of the functions callable to interract with the Windows VM, while hlapi abstracts everything in a bit simpler to use manner (requires C++).
 
 Rust bindings are available in a [separate repository](https://github.com/Heep042/vmread-rs).
